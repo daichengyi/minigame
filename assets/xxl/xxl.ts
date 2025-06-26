@@ -526,10 +526,8 @@ export class xxl extends Component {
             block2.node.setPosition(block2OriginalPos);
         }
 
-        // 执行交换动画
-        await this.swapBlocksAnimation(block1, block2);
-
-        console.log(`交换完成，检查消除...`);
+        // 先交换数据结构
+        this.swapBlockData(block1, block2);
 
         // 检查是否可以消除
         const canEliminate = this.checkForMatches();
@@ -541,13 +539,10 @@ export class xxl extends Component {
             console.log(`开始消除流程`);
             await this.eliminateMatches();
         } else {
-            // 不能消除，直接复位到原始位置（不调用动画，直接设置位置）
-            console.log(`不能消除，复位方块`);
+            // 不能消除，交换数据结构回来，然后执行交换动画
+            console.log(`不能消除，交换回来`);
             this.swapBlockData(block1, block2);
-            const block1OriginalPos = this.getBlockOriginalPosition(block1);
-            const block2OriginalPos = this.getBlockOriginalPosition(block2);
-            block1.node.setPosition(block1OriginalPos);
-            block2.node.setPosition(block2OriginalPos);
+            await this.swapBlocksAnimation(block1, block2);
         }
 
         this.isProcessing = false;
@@ -677,6 +672,11 @@ export class xxl extends Component {
         // 消除动画
         await this.removeBlocksAnimation(Array.from(blocksToRemove));
 
+        // 从游戏板中移除消除的方块
+        blocksToRemove.forEach(block => {
+            this.gameBoard[block.row][block.col] = null!;
+        });
+
         // 下落
         await this.dropBlocks();
 
@@ -717,7 +717,7 @@ export class xxl extends Component {
 
             for (let row = this.GRID_ROWS - 1; row >= 0; row--) {
                 const blockData = this.gameBoard[row][col];
-                if (blockData.node.scale.x > 0) {
+                if (blockData && blockData.node.scale.x > 0) {
                     // 方块存在，移动到空位
                     if (emptyRow !== row) {
                         this.gameBoard[emptyRow][col] = blockData;
