@@ -385,6 +385,8 @@ export class xxl extends Component {
     private onTouchEnd(event: EventTouch): void {
         if (!this.isDragging || !this.dragBlock) return;
 
+        console.log(`触摸结束，拖拽方块位置: (${this.dragBlock.row}, ${this.dragBlock.col})`);
+
         // 检测拖拽方块是否与相邻方块重叠
         const dragBlockWorldPos = this.dragBlock.node.getWorldPosition();
         let closestBlock: BlockData | null = null;
@@ -392,12 +394,16 @@ export class xxl extends Component {
 
         // 检查所有相邻方块
         const adjacentBlocks = this.getAdjacentBlocks(this.dragBlock);
+        console.log(`找到 ${adjacentBlocks.length} 个相邻方块`);
+
         for (const adjacentBlock of adjacentBlocks) {
             const adjacentWorldPos = adjacentBlock.node.getWorldPosition();
             const distance = Vec2.distance(
                 new Vec2(dragBlockWorldPos.x, dragBlockWorldPos.y),
                 new Vec2(adjacentWorldPos.x, adjacentWorldPos.y)
             );
+
+            console.log(`相邻方块(${adjacentBlock.row}, ${adjacentBlock.col}) 距离: ${distance}`);
 
             if (distance < minDistance && distance < this.BLOCK_SIZE) {
                 minDistance = distance;
@@ -411,6 +417,7 @@ export class xxl extends Component {
             this.trySwapBlocks(this.dragBlock, closestBlock);
         } else {
             // 没有找到相邻方块，直接复位
+            console.log('没有找到相邻方块，直接复位');
             this.resetDragBlock();
             this.resetAdjacentBlock();
         }
