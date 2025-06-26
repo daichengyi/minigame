@@ -140,6 +140,12 @@ export class xxl extends Component {
         const touchPos = event.getUILocation();
         const block = this.getBlockAtPosition(touchPos);
         if (block) {
+            // 检查是否有可交换的相邻方块
+            const hasAdjacentBlock = this.hasAdjacentBlock(block);
+            if (!hasAdjacentBlock) {
+                return; // 没有相邻方块，不允许拖拽
+            }
+
             this.isDragging = false;
             this.dragBlock = block;
             this.dragStartPos = touchPos;
@@ -147,6 +153,32 @@ export class xxl extends Component {
             const node = this.blockNodeMap.get(block);
             if (node) this.dragOriginalPos = node.getPosition();
         }
+    }
+
+    private hasAdjacentBlock(block: BlockData): boolean {
+        // 检查上下左右四个方向是否有相邻方块
+        const directions = [
+            { row: -1, col: 0 }, // 上
+            { row: 1, col: 0 },  // 下
+            { row: 0, col: -1 }, // 左
+            { row: 0, col: 1 }   // 右
+        ];
+
+        for (const dir of directions) {
+            const targetRow = block.row + dir.row;
+            const targetCol = block.col + dir.col;
+
+            // 检查是否在边界内
+            if (targetRow >= 0 && targetRow < this.GRID_ROWS &&
+                targetCol >= 0 && targetCol < this.GRID_COLS) {
+                const adjacentBlock = this.boardModel.getBlock(targetRow, targetCol);
+                if (adjacentBlock) {
+                    return true; // 找到相邻方块
+                }
+            }
+        }
+
+        return false; // 没有相邻方块
     }
 
     private onTouchMove(event: EventTouch) {
@@ -158,14 +190,21 @@ export class xxl extends Component {
         const totalDistance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
 
         if (!this.isDragging && totalDistance >= minDragDistance) {
-            this.isDragging = true;
             // 确定拖拽方向
             const absDeltaX = Math.abs(deltaX);
             const absDeltaY = Math.abs(deltaY);
+            let direction = '';
+
             if (absDeltaX > absDeltaY) {
-                this.dragDirection = deltaX > 0 ? 'right' : 'left';
+                direction = deltaX > 0 ? 'right' : 'left';
             } else {
-                this.dragDirection = deltaY > 0 ? 'up' : 'down';
+                direction = deltaY > 0 ? 'up' : 'down';
+            }
+
+            // 检查该方向是否有相邻方块
+            if (this.hasAdjacentBlockInDirection(this.dragBlock, direction)) {
+                this.isDragging = true;
+                this.dragDirection = direction;
             }
         }
 
@@ -486,6 +525,35 @@ export class xxl extends Component {
         }
 
         await Promise.all(fillPromises);
+    }
+
+    private hasAdjacentBlockInDirection(block: BlockData, direction: string): boolean {
+        let targetRow = block.row;
+        let targetCol = block.col;
+
+        switch (direction) {
+            case 'up':
+                targetRow = block.row - 1;
+                break;
+            case 'down':
+                targetRow = block.row + 1;
+                break;
+            case 'left':
+                targetCol = block.col - 1;
+                break;
+            case 'right':
+                targetCol = block.col + 1;
+                break;
+        }
+
+        // 检查是否在边界内
+        if (targetRow >= 0 && targetRow < this.GRID_ROWS &&
+            targetCol >= 0 && targetCol < this.GRID_COLS) {
+            const adjacentBlock = this.boardModel.getBlock(targetRow, targetCol);
+            return adjacentBlock !== null;
+        }
+
+        return false;
     }
 
     onDestroy() {
