@@ -405,7 +405,8 @@ export class xxl extends Component {
 
             console.log(`相邻方块(${adjacentBlock.row}, ${adjacentBlock.col}) 距离: ${distance}`);
 
-            if (distance < minDistance && distance < this.BLOCK_SIZE) {
+            // 增加距离阈值，允许拖拽时的距离偏差
+            if (distance < minDistance && distance < this.BLOCK_SIZE * 1.5) {
                 minDistance = distance;
                 closestBlock = adjacentBlock;
             }
