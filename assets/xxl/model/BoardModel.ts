@@ -1,5 +1,4 @@
 import { BlockData } from './BlockData';
-import { BlockType } from './BlockType';
 
 /**
  * 棋盘数据模型

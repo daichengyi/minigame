@@ -40,7 +40,6 @@ export class xxl extends Component {
 
     // 位置计算缓存
     private readonly positionCache: Vec3[][] = [];
-    private readonly tempVec3 = new Vec3();
 
     /**
      * 组件启动时调用
@@ -154,7 +153,6 @@ export class xxl extends Component {
         const node = instantiate(this.block.node);
         node.setParent(this.content);
         node.active = true;
-        node.layer = this.content.layer;
 
         const transform = node.getComponent(UITransform);
         if (transform) {
@@ -228,22 +226,46 @@ export class xxl extends Component {
     }
 
     /**
-     * 检查方块是否有相邻方块
+     * 获取指定方向的相邻方块或检查是否存在
+     * @param block 要检查的方块
+     * @param direction 指定方向
+     * @param returnBlock 是否返回方块对象，false则只返回是否存在
+     * @returns 方块对象或布尔值
      */
-    private hasAdjacentBlock(block: BlockData): boolean {
-        for (const dir of xxl.DIRECTIONS) {
-            const targetRow = block.row + dir.row;
-            const targetCol = block.col + dir.col;
+    private getAdjacentBlockByDirection(block: BlockData, direction: DragDirection, returnBlock: boolean = true): BlockData | boolean | null {
+        const dir = xxl.DIRECTIONS.find(d => d.direction === direction);
+        if (!dir) return returnBlock ? null : false;
 
-            if (targetRow >= 0 && targetRow < this.GRID_ROWS &&
-                targetCol >= 0 && targetCol < this.GRID_COLS) {
-                const adjacentBlock = this.boardModel.getBlock(targetRow, targetCol);
-                if (adjacentBlock) {
+        const targetRow = block.row + dir.row;
+        const targetCol = block.col + dir.col;
+
+        if (targetRow >= 0 && targetRow < this.GRID_ROWS &&
+            targetCol >= 0 && targetCol < this.GRID_COLS) {
+            const adjacentBlock = this.boardModel.getBlock(targetRow, targetCol);
+            return returnBlock ? adjacentBlock : (adjacentBlock !== null);
+        }
+        return returnBlock ? null : false;
+    }
+
+    /**
+     * 检查方块是否有相邻方块
+     * @param block 要检查的方块
+     * @param direction 指定方向，如果为null则检查所有方向
+     * @returns 是否有相邻方块
+     */
+    private hasAdjacentBlock(block: BlockData, direction?: DragDirection): boolean {
+        if (direction) {
+            // 检查指定方向
+            return this.getAdjacentBlockByDirection(block, direction, false) as boolean;
+        } else {
+            // 检查所有方向
+            for (const dir of xxl.DIRECTIONS) {
+                if (this.getAdjacentBlockByDirection(block, dir.direction, false) as boolean) {
                     return true;
                 }
             }
+            return false;
         }
-        return false;
     }
 
     /**
@@ -270,11 +292,11 @@ export class xxl extends Component {
 
         if (!this.isDragging && totalDistance >= this.MIN_DRAG_DISTANCE) {
             // 检查该方向是否有相邻方块
-            if (this.hasAdjacentBlockInDirection(this.dragBlock, currentDirection)) {
+            if (this.hasAdjacentBlock(this.dragBlock, currentDirection)) {
                 this.isDragging = true;
                 this.dragDirection = currentDirection;
                 // 保存相邻方块信息
-                this.adjacentBlock = this.getAdjacentBlockByDirection(this.dragBlock, currentDirection);
+                this.adjacentBlock = this.getAdjacentBlockByDirection(this.dragBlock, currentDirection) as BlockData;
                 if (this.adjacentBlock) {
                     this.adjacentOriginalPos = this.getBlockOriginalPosition(this.adjacentBlock);
                 }
@@ -296,10 +318,10 @@ export class xxl extends Component {
             }
 
             // 检查新方向是否有相邻方块
-            if (this.hasAdjacentBlockInDirection(this.dragBlock, currentDirection)) {
+            if (this.hasAdjacentBlock(this.dragBlock, currentDirection)) {
                 this.dragDirection = currentDirection;
                 // 更新相邻方块信息
-                this.adjacentBlock = this.getAdjacentBlockByDirection(this.dragBlock, currentDirection);
+                this.adjacentBlock = this.getAdjacentBlockByDirection(this.dragBlock, currentDirection) as BlockData;
                 if (this.adjacentBlock) {
                     this.adjacentOriginalPos = this.getBlockOriginalPosition(this.adjacentBlock);
                 }
@@ -341,44 +363,10 @@ export class xxl extends Component {
     }
 
     /**
-     * 检查指定方向是否有相邻方块
-     */
-    private hasAdjacentBlockInDirection(block: BlockData, direction: DragDirection): boolean {
-        const dir = xxl.DIRECTIONS.find(d => d.direction === direction);
-        if (!dir) return false;
-
-        const targetRow = block.row + dir.row;
-        const targetCol = block.col + dir.col;
-
-        if (targetRow >= 0 && targetRow < this.GRID_ROWS &&
-            targetCol >= 0 && targetCol < this.GRID_COLS) {
-            return this.boardModel.getBlock(targetRow, targetCol) !== null;
-        }
-        return false;
-    }
-
-    /**
      * 获取方块的原始位置
      */
     private getBlockOriginalPosition(block: BlockData): Vec3 {
         return this.positionCache[block.row][block.col];
-    }
-
-    /**
-     * 根据方向获取相邻方块
-     */
-    private getAdjacentBlockByDirection(block: BlockData, direction: DragDirection): BlockData | null {
-        const dir = xxl.DIRECTIONS.find(d => d.direction === direction);
-        if (!dir) return null;
-
-        const targetRow = block.row + dir.row;
-        const targetCol = block.col + dir.col;
-
-        if (targetRow >= 0 && targetRow < this.GRID_ROWS &&
-            targetCol >= 0 && targetCol < this.GRID_COLS) {
-            return this.boardModel.getBlock(targetRow, targetCol);
-        }
-        return null;
     }
 
     /**
