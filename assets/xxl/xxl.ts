@@ -3,6 +3,7 @@ const { ccclass, property } = _decorator;
 import { BoardModel } from './model/BoardModel';
 import { BlockData } from './model/BlockData';
 import { BlockType } from './model/BlockType';
+import { DragDirection } from './model/DragDirection';
 import { GameLogic } from './service/GameLogic';
 
 @ccclass('xxl')
@@ -28,7 +29,7 @@ export class xxl extends Component {
     private adjacentOriginalPos: Vec3 = new Vec3();
     private isDragging: boolean = false;
     private isProcessing: boolean = false;
-    private dragDirection: string = '';
+    private dragDirection: DragDirection = DragDirection.UP;
 
     /**
      * 组件启动时调用
@@ -192,7 +193,7 @@ export class xxl extends Component {
             this.isDragging = false;
             this.dragBlock = block;
             this.dragStartPos = touchPos;
-            this.dragDirection = '';
+            this.dragDirection = DragDirection.UP;
             this.adjacentBlock = null;
 
             const node = this.blockNodeMap.get(block);
@@ -235,18 +236,18 @@ export class xxl extends Component {
         const touchPos = event.getUILocation();
         const deltaX = touchPos.x - this.dragStartPos.x;
         const deltaY = touchPos.y - this.dragStartPos.y;
-        const minDragDistance = 20;
+        const minDragDistance = 5;
         const totalDistance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
 
         // 确定当前拖拽方向
-        let currentDirection = '';
+        let currentDirection = DragDirection.UP;
         const absDeltaX = Math.abs(deltaX);
         const absDeltaY = Math.abs(deltaY);
 
         if (absDeltaX > absDeltaY) {
-            currentDirection = deltaX > 0 ? 'right' : 'left';
+            currentDirection = deltaX > 0 ? DragDirection.RIGHT : DragDirection.LEFT;
         } else {
-            currentDirection = deltaY > 0 ? 'up' : 'down';
+            currentDirection = deltaY > 0 ? DragDirection.UP : DragDirection.DOWN;
         }
 
         if (!this.isDragging && totalDistance >= minDragDistance) {
@@ -296,12 +297,12 @@ export class xxl extends Component {
         const maxMove = this.BLOCK_SIZE;
 
         switch (this.dragDirection) {
-            case 'left':
-            case 'right':
+            case DragDirection.LEFT:
+            case DragDirection.RIGHT:
                 moveX = Math.max(-maxMove, Math.min(maxMove, deltaX));
                 break;
-            case 'up':
-            case 'down':
+            case DragDirection.UP:
+            case DragDirection.DOWN:
                 moveY = Math.max(-maxMove, Math.min(maxMove, deltaY));
                 break;
         }
@@ -324,21 +325,21 @@ export class xxl extends Component {
     /**
      * 检查指定方向是否有相邻方块
      */
-    private hasAdjacentBlockInDirection(block: BlockData, direction: string): boolean {
+    private hasAdjacentBlockInDirection(block: BlockData, direction: DragDirection): boolean {
         let targetRow = block.row;
         let targetCol = block.col;
 
         switch (direction) {
-            case 'up':
+            case DragDirection.UP:
                 targetRow = block.row - 1;
                 break;
-            case 'down':
+            case DragDirection.DOWN:
                 targetRow = block.row + 1;
                 break;
-            case 'left':
+            case DragDirection.LEFT:
                 targetCol = block.col - 1;
                 break;
-            case 'right':
+            case DragDirection.RIGHT:
                 targetCol = block.col + 1;
                 break;
         }
@@ -364,21 +365,21 @@ export class xxl extends Component {
     /**
      * 根据方向获取相邻方块
      */
-    private getAdjacentBlockByDirection(block: BlockData, direction: string): BlockData | null {
+    private getAdjacentBlockByDirection(block: BlockData, direction: DragDirection): BlockData | null {
         let targetRow = block.row;
         let targetCol = block.col;
 
         switch (direction) {
-            case 'up':
+            case DragDirection.UP:
                 targetRow = Math.max(0, block.row - 1);
                 break;
-            case 'down':
+            case DragDirection.DOWN:
                 targetRow = Math.min(this.GRID_ROWS - 1, block.row + 1);
                 break;
-            case 'left':
+            case DragDirection.LEFT:
                 targetCol = Math.max(0, block.col - 1);
                 break;
-            case 'right':
+            case DragDirection.RIGHT:
                 targetCol = Math.min(this.GRID_COLS - 1, block.col + 1);
                 break;
         }
@@ -394,26 +395,13 @@ export class xxl extends Component {
      */
     private async onTouchEnd(event: EventTouch) {
         if (!this.dragBlock) return;
-        if (!this.isDragging) {
-            this.isDragging = false;
-            this.dragBlock = null;
-            this.adjacentBlock = null;
-            return;
-        }
-
-        // 先复位相邻方块到原始位置
-        if (this.adjacentBlock) {
-            const adjacentNode = this.blockNodeMap.get(this.adjacentBlock);
-            if (adjacentNode) {
-                adjacentNode.setPosition(this.adjacentOriginalPos.x, this.adjacentOriginalPos.y, 0);
+        if (this.isDragging) {
+            if (this.adjacentBlock) {
+                await this.trySwapBlocks(this.dragBlock, this.adjacentBlock);
+            } else {
+                // 复位所有方块到原始位置
+                await this.resetAllBlocksToOriginalPosition();
             }
-        }
-
-        if (this.adjacentBlock) {
-            await this.trySwapBlocks(this.dragBlock, this.adjacentBlock);
-        } else {
-            // 复位所有方块到原始位置
-            await this.resetAllBlocksToOriginalPosition();
         }
         this.isDragging = false;
         this.dragBlock = null;
@@ -540,13 +528,6 @@ export class xxl extends Component {
                     node.destroy();
                     finished++;
                     if (finished === blocks.length) resolve();
-                    // tween(node)
-                    //     .to(0.2, { scale: new Vec3(0, 0, 0) })
-                    //     .call(() => {
-                    //         finished++;
-                    //         if (finished === blocks.length) resolve();
-                    //     })
-                    //     .start();
                 }
             }
             if (blocks.length === 0) resolve();
