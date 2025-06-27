@@ -1,6 +1,6 @@
 import { BoardModel } from '../model/BoardModel';
 import { BlockData } from '../model/BlockData';
-import { BlockType } from '../model/BlockType';
+import { BlockType, BlockTypeUtil } from '../model/BlockType';
 
 /**
  * 游戏逻辑服务
@@ -37,42 +37,46 @@ export class GameLogic {
         const matches: BlockData[][] = [];
 
         // 检查水平匹配
-        for (let r = 0; r < this.board.rows; r++) {
-            let match: BlockData[] = [];
-            let lastType: BlockType | null = null;
-
-            for (let c = 0; c < this.board.cols; c++) {
-                const block = this.board.getBlock(r, c);
-                if (block && block.type === lastType) {
-                    match.push(block);
-                } else {
-                    if (match.length >= 3) matches.push([...match]);
-                    match = block ? [block] : [];
-                }
-                lastType = block ? block.type : null;
-            }
-            if (match.length >= 3) matches.push([...match]);
-        }
-
+        this.findMatchesInDirection(matches, true);
         // 检查垂直匹配
-        for (let c = 0; c < this.board.cols; c++) {
-            let match: BlockData[] = [];
-            let lastType: BlockType | null = null;
-
-            for (let r = 0; r < this.board.rows; r++) {
-                const block = this.board.getBlock(r, c);
-                if (block && block.type === lastType) {
-                    match.push(block);
-                } else {
-                    if (match.length >= 3) matches.push([...match]);
-                    match = block ? [block] : [];
-                }
-                lastType = block ? block.type : null;
-            }
-            if (match.length >= 3) matches.push([...match]);
-        }
+        this.findMatchesInDirection(matches, false);
 
         return matches;
+    }
+
+    /**
+     * 在指定方向查找匹配
+     * @param matches 匹配结果数组
+     * @param isHorizontal 是否为水平方向
+     */
+    private findMatchesInDirection(matches: BlockData[][], isHorizontal: boolean) {
+        const outerSize = isHorizontal ? this.board.rows : this.board.cols;
+        const innerSize = isHorizontal ? this.board.cols : this.board.rows;
+
+        for (let outer = 0; outer < outerSize; outer++) {
+            let match: BlockData[] = [];
+            let lastType: BlockType | null = null;
+
+            for (let inner = 0; inner < innerSize; inner++) {
+                const row = isHorizontal ? outer : inner;
+                const col = isHorizontal ? inner : outer;
+                const block = this.board.getBlock(row, col);
+
+                if (block && block.type === lastType) {
+                    match.push(block);
+                } else {
+                    if (match.length >= 3) {
+                        matches.push([...match]);
+                    }
+                    match = block ? [block] : [];
+                }
+                lastType = block ? block.type : null;
+            }
+
+            if (match.length >= 3) {
+                matches.push([...match]);
+            }
+        }
     }
 
     /**
@@ -117,7 +121,7 @@ export class GameLogic {
         for (let c = 0; c < this.board.cols; c++) {
             for (let r = 0; r < this.board.rows; r++) {
                 if (!this.board.getBlock(r, c)) {
-                    const type = Math.floor(Math.random() * this.board.blockTypes);
+                    const type = BlockTypeUtil.getRandomType();
                     this.board.setBlock(r, c, new BlockData(type, r, c));
                 }
             }

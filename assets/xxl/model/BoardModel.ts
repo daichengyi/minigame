@@ -43,6 +43,11 @@ export class BoardModel {
      * @param block 方块数据，null表示空位
      */
     setBlock(row: number, col: number, block: BlockData | null) {
+        // 边界检查
+        if (row < 0 || row >= this.rows || col < 0 || col >= this.cols) {
+            return;
+        }
+
         this.grid[row][col] = block;
         if (block) {
             block.row = row;
@@ -57,6 +62,31 @@ export class BoardModel {
      * @returns 方块数据，null表示空位
      */
     getBlock(row: number, col: number): BlockData | null {
+        // 边界检查
+        if (row < 0 || row >= this.rows || col < 0 || col >= this.cols) {
+            return null;
+        }
         return this.grid[row][col];
+    }
+
+    /**
+     * 检查位置是否有效
+     * @param row 行坐标
+     * @param col 列坐标
+     * @returns 位置是否有效
+     */
+    isValidPosition(row: number, col: number): boolean {
+        return row >= 0 && row < this.rows && col >= 0 && col < this.cols;
+    }
+
+    /**
+     * 清空整个棋盘
+     */
+    clearBoard() {
+        for (let r = 0; r < this.rows; r++) {
+            for (let c = 0; c < this.cols; c++) {
+                this.grid[r][c] = null;
+            }
+        }
     }
 } 

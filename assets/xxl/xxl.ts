@@ -2,8 +2,8 @@ import { _decorator, Component, Node, Sprite, UITransform, instantiate, Vec3, in
 const { ccclass, property } = _decorator;
 import { BoardModel } from './model/BoardModel';
 import { BlockData } from './model/BlockData';
-import { BlockType } from './model/BlockType';
-import { DragDirection } from './model/DragDirection';
+import { BlockType, BlockTypeUtil } from './model/BlockType';
+import { DragDirection, DragDirectionUtil } from './model/DragDirection';
 import { GameLogic } from './service/GameLogic';
 
 @ccclass('xxl')
@@ -15,7 +15,14 @@ export class xxl extends Component {
     private readonly GRID_ROWS = 8;
     private readonly GRID_COLS = 8;
     private readonly BLOCK_SIZE = 85;
-    private readonly BLOCK_TYPES = 5;
+    private readonly BLOCK_TYPES = BlockTypeUtil.getTypeCount();
+    private readonly MIN_DRAG_DISTANCE = 20; // 增加拖拽阈值
+
+    // 方向常量 - 使用工具类
+    private static readonly DIRECTIONS = DragDirectionUtil.getAllDirections().map(direction => ({
+        direction,
+        ...DragDirectionUtil.getDirectionOffset(direction)
+    }));
 
     // 游戏状态
     private boardModel: BoardModel;
@@ -30,6 +37,10 @@ export class xxl extends Component {
     private isDragging: boolean = false;
     private isProcessing: boolean = false;
     private dragDirection: DragDirection = DragDirection.UP;
+
+    // 位置计算缓存
+    private readonly positionCache: Vec3[][] = [];
+    private readonly tempVec3 = new Vec3();
 
     /**
      * 组件启动时调用
@@ -64,8 +75,23 @@ export class xxl extends Component {
     private initGame() {
         this.boardModel = new BoardModel(this.GRID_ROWS, this.GRID_COLS, this.BLOCK_TYPES);
         this.gameLogic = new GameLogic(this.boardModel);
+        this.initPositionCache();
         this.generateInitialBlocks();
         this.renderBoard();
+    }
+
+    /**
+     * 初始化位置缓存
+     */
+    private initPositionCache() {
+        for (let row = 0; row < this.GRID_ROWS; row++) {
+            this.positionCache[row] = [];
+            for (let col = 0; col < this.GRID_COLS; col++) {
+                const x = -(this.GRID_COLS - 1) * this.BLOCK_SIZE / 2 + col * this.BLOCK_SIZE;
+                const y = (this.GRID_ROWS - 1) * this.BLOCK_SIZE / 2 - row * this.BLOCK_SIZE;
+                this.positionCache[row][col] = new Vec3(x, y, 0);
+            }
+        }
     }
 
     /**
@@ -76,7 +102,7 @@ export class xxl extends Component {
             for (let col = 0; col < this.GRID_COLS; col++) {
                 let type: BlockType;
                 do {
-                    type = Math.floor(Math.random() * this.BLOCK_TYPES);
+                    type = BlockTypeUtil.getRandomType();
                 } while (this.wouldCreateMatch(row, col, type));
                 this.boardModel.setBlock(row, col, new BlockData(type, row, col));
             }
@@ -135,9 +161,9 @@ export class xxl extends Component {
             transform.setContentSize(this.BLOCK_SIZE, this.BLOCK_SIZE);
         }
 
-        const x = -(this.GRID_COLS - 1) * this.BLOCK_SIZE / 2 + block.col * this.BLOCK_SIZE;
-        const y = (this.GRID_ROWS - 1) * this.BLOCK_SIZE / 2 - block.row * this.BLOCK_SIZE;
-        node.setPosition(x, y, 0);
+        // 使用缓存的位置
+        const position = this.getBlockOriginalPosition(block);
+        node.setPosition(position.x, position.y, 0);
 
         const sprite = node.getComponent(Sprite);
         if (sprite) sprite.spriteFrame = this.blockSprites[block.type];
@@ -205,14 +231,7 @@ export class xxl extends Component {
      * 检查方块是否有相邻方块
      */
     private hasAdjacentBlock(block: BlockData): boolean {
-        const directions = [
-            { row: -1, col: 0 }, // 上
-            { row: 1, col: 0 },  // 下
-            { row: 0, col: -1 }, // 左
-            { row: 0, col: 1 }   // 右
-        ];
-
-        for (const dir of directions) {
+        for (const dir of xxl.DIRECTIONS) {
             const targetRow = block.row + dir.row;
             const targetCol = block.col + dir.col;
 
@@ -236,7 +255,6 @@ export class xxl extends Component {
         const touchPos = event.getUILocation();
         const deltaX = touchPos.x - this.dragStartPos.x;
         const deltaY = touchPos.y - this.dragStartPos.y;
-        const minDragDistance = 5;
         const totalDistance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
 
         // 确定当前拖拽方向
@@ -250,7 +268,7 @@ export class xxl extends Component {
             currentDirection = deltaY > 0 ? DragDirection.UP : DragDirection.DOWN;
         }
 
-        if (!this.isDragging && totalDistance >= minDragDistance) {
+        if (!this.isDragging && totalDistance >= this.MIN_DRAG_DISTANCE) {
             // 检查该方向是否有相邻方块
             if (this.hasAdjacentBlockInDirection(this.dragBlock, currentDirection)) {
                 this.isDragging = true;
@@ -326,30 +344,16 @@ export class xxl extends Component {
      * 检查指定方向是否有相邻方块
      */
     private hasAdjacentBlockInDirection(block: BlockData, direction: DragDirection): boolean {
-        let targetRow = block.row;
-        let targetCol = block.col;
+        const dir = xxl.DIRECTIONS.find(d => d.direction === direction);
+        if (!dir) return false;
 
-        switch (direction) {
-            case DragDirection.UP:
-                targetRow = block.row - 1;
-                break;
-            case DragDirection.DOWN:
-                targetRow = block.row + 1;
-                break;
-            case DragDirection.LEFT:
-                targetCol = block.col - 1;
-                break;
-            case DragDirection.RIGHT:
-                targetCol = block.col + 1;
-                break;
-        }
+        const targetRow = block.row + dir.row;
+        const targetCol = block.col + dir.col;
 
         if (targetRow >= 0 && targetRow < this.GRID_ROWS &&
             targetCol >= 0 && targetCol < this.GRID_COLS) {
-            const adjacentBlock = this.boardModel.getBlock(targetRow, targetCol);
-            return adjacentBlock !== null;
+            return this.boardModel.getBlock(targetRow, targetCol) !== null;
         }
-
         return false;
     }
 
@@ -357,34 +361,21 @@ export class xxl extends Component {
      * 获取方块的原始位置
      */
     private getBlockOriginalPosition(block: BlockData): Vec3 {
-        const x = -(this.GRID_COLS - 1) * this.BLOCK_SIZE / 2 + block.col * this.BLOCK_SIZE;
-        const y = (this.GRID_ROWS - 1) * this.BLOCK_SIZE / 2 - block.row * this.BLOCK_SIZE;
-        return new Vec3(x, y, 0);
+        return this.positionCache[block.row][block.col];
     }
 
     /**
      * 根据方向获取相邻方块
      */
     private getAdjacentBlockByDirection(block: BlockData, direction: DragDirection): BlockData | null {
-        let targetRow = block.row;
-        let targetCol = block.col;
+        const dir = xxl.DIRECTIONS.find(d => d.direction === direction);
+        if (!dir) return null;
 
-        switch (direction) {
-            case DragDirection.UP:
-                targetRow = Math.max(0, block.row - 1);
-                break;
-            case DragDirection.DOWN:
-                targetRow = Math.min(this.GRID_ROWS - 1, block.row + 1);
-                break;
-            case DragDirection.LEFT:
-                targetCol = Math.max(0, block.col - 1);
-                break;
-            case DragDirection.RIGHT:
-                targetCol = Math.min(this.GRID_COLS - 1, block.col + 1);
-                break;
-        }
+        const targetRow = block.row + dir.row;
+        const targetCol = block.col + dir.col;
 
-        if (targetRow !== block.row || targetCol !== block.col) {
+        if (targetRow >= 0 && targetRow < this.GRID_ROWS &&
+            targetCol >= 0 && targetCol < this.GRID_COLS) {
             return this.boardModel.getBlock(targetRow, targetCol);
         }
         return null;
@@ -475,7 +466,8 @@ export class xxl extends Component {
                     if (block) {
                         const node = this.blockNodeMap.get(block);
                         if (node) {
-                            const originalPos = this.getBlockOriginalPosition(block);
+                            // 使用缓存的位置
+                            const originalPos = this.positionCache[row][col];
                             tween(node)
                                 .to(0.1, { position: originalPos })
                                 .call(() => {
@@ -525,6 +517,8 @@ export class xxl extends Component {
             for (const block of blocks) {
                 const node = this.blockNodeMap.get(block);
                 if (node) {
+                    // 从映射中移除引用，然后销毁节点
+                    this.blockNodeMap.delete(block);
                     node.destroy();
                     finished++;
                     if (finished === blocks.length) resolve();
@@ -553,11 +547,17 @@ export class xxl extends Component {
                         // 执行下落动画
                         const node = this.blockNodeMap.get(block);
                         if (node) {
-                            const targetY = (this.GRID_ROWS - 1 - emptyRow) * this.BLOCK_SIZE - (this.GRID_ROWS - 1) * this.BLOCK_SIZE / 2;
+                            // 使用缓存的位置
+                            const targetPosition = this.positionCache[emptyRow][col];
                             const promise = new Promise<void>(resolve => {
                                 tween(node)
-                                    .to(0.3, { position: new Vec3(node.position.x, targetY, 0) })
-                                    .call(() => resolve())
+                                    .to(0.3, { position: targetPosition })
+                                    .call(() => {
+                                        // 更新blockNodeMap中的引用
+                                        this.blockNodeMap.delete(block);
+                                        this.blockNodeMap.set(block, node);
+                                        resolve();
+                                    })
                                     .start();
                             });
                             dropPromises.push(promise);
@@ -589,16 +589,16 @@ export class xxl extends Component {
                         // 设置初始位置（从顶部开始）
                         const startX = -(this.GRID_COLS - 1) * this.BLOCK_SIZE / 2 + col * this.BLOCK_SIZE;
                         const startY = (this.GRID_ROWS - 1) * this.BLOCK_SIZE / 2 + this.BLOCK_SIZE * 2;
-                        const targetY = (this.GRID_ROWS - 1 - row) * this.BLOCK_SIZE - (this.GRID_ROWS - 1) * this.BLOCK_SIZE / 2;
+
+                        // 使用缓存的目标位置
+                        const targetPosition = this.positionCache[row][col];
 
                         node.setPosition(startX, startY, 0);
-                        // node.setScale(new Vec3(0, 0, 1));
 
                         const promise = new Promise<void>(resolve => {
                             tween(node)
                                 .to(0.3, {
-                                    position: new Vec3(startX, targetY, 0),
-                                    // scale: new Vec3(1, 1, 1)
+                                    position: targetPosition
                                 })
                                 .call(() => resolve())
                                 .start();
