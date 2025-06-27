@@ -10,11 +10,13 @@ export class xxl extends Component {
     @property(Node) private content: Node = null!;
     @property(Sprite) private block: Sprite = null!;
 
+    // 游戏配置
     private readonly GRID_ROWS = 8;
     private readonly GRID_COLS = 8;
     private readonly BLOCK_SIZE = 85;
     private readonly BLOCK_TYPES = 5;
 
+    // 游戏状态
     private boardModel: BoardModel;
     private gameLogic: GameLogic;
     private blockSprites: SpriteFrame[] = [];
@@ -26,10 +28,16 @@ export class xxl extends Component {
     private isProcessing: boolean = false;
     private dragDirection: string = '';
 
+    /**
+     * 组件启动时调用
+     */
     start() {
         this.loadBlockSprites();
     }
 
+    /**
+     * 加载方块图片资源
+     */
     private loadBlockSprites() {
         this.blockSprites = [];
         let loadedCount = 0;
@@ -47,6 +55,9 @@ export class xxl extends Component {
         }
     }
 
+    /**
+     * 初始化游戏
+     */
     private initGame() {
         this.boardModel = new BoardModel(this.GRID_ROWS, this.GRID_COLS, this.BLOCK_TYPES);
         this.gameLogic = new GameLogic(this.boardModel);
@@ -54,6 +65,9 @@ export class xxl extends Component {
         this.renderBoard();
     }
 
+    /**
+     * 生成初始方块
+     */
     private generateInitialBlocks() {
         for (let row = 0; row < this.GRID_ROWS; row++) {
             for (let col = 0; col < this.GRID_COLS; col++) {
@@ -66,14 +80,19 @@ export class xxl extends Component {
         }
     }
 
+    /**
+     * 检查是否会产生初始匹配
+     */
     private wouldCreateMatch(row: number, col: number, type: BlockType): boolean {
-        // 只检查左侧和上方
+        // 检查左侧
         let count = 1;
         for (let i = 1; i <= 2; i++) {
             if (col - i >= 0 && this.boardModel.getBlock(row, col - i)?.type === type) count++;
             else break;
         }
         if (count >= 3) return true;
+
+        // 检查上方
         count = 1;
         for (let i = 1; i <= 2; i++) {
             if (row - i >= 0 && this.boardModel.getBlock(row - i, col)?.type === type) count++;
@@ -82,6 +101,9 @@ export class xxl extends Component {
         return count >= 3;
     }
 
+    /**
+     * 渲染游戏棋盘
+     */
     private renderBoard() {
         this.blockNodeMap.clear();
         this.content.removeAllChildren();
@@ -96,23 +118,33 @@ export class xxl extends Component {
         }
     }
 
+    /**
+     * 创建方块节点
+     */
     private createBlockNode(block: BlockData): Node {
         const node = instantiate(this.block.node);
         node.setParent(this.content);
         node.active = true;
         node.layer = this.content.layer;
+
         const transform = node.getComponent(UITransform);
         if (transform) {
             transform.setContentSize(this.BLOCK_SIZE, this.BLOCK_SIZE);
         }
+
         const x = -(this.GRID_COLS - 1) * this.BLOCK_SIZE / 2 + block.col * this.BLOCK_SIZE;
         const y = (this.GRID_ROWS - 1) * this.BLOCK_SIZE / 2 - block.row * this.BLOCK_SIZE;
         node.setPosition(x, y, 0);
+
         const sprite = node.getComponent(Sprite);
         if (sprite) sprite.spriteFrame = this.blockSprites[block.type];
+
         return node;
     }
 
+    /**
+     * 设置输入事件监听
+     */
     private setupInput() {
         input.on(Input.EventType.TOUCH_START, this.onTouchStart, this);
         input.on(Input.EventType.TOUCH_MOVE, this.onTouchMove, this);
@@ -120,13 +152,18 @@ export class xxl extends Component {
         input.on(Input.EventType.TOUCH_CANCEL, this.onTouchEnd, this);
     }
 
+    /**
+     * 根据触摸位置获取方块
+     */
     private getBlockAtPosition(worldPos: Vec2): BlockData | null {
         for (let row = 0; row < this.GRID_ROWS; row++) {
             for (let col = 0; col < this.GRID_COLS; col++) {
                 const block = this.boardModel.getBlock(row, col);
                 if (!block) continue;
+
                 const node = this.blockNodeMap.get(block);
                 if (!node) continue;
+
                 const blockWorldPos = node.getWorldPosition();
                 const distance = Vec2.distance(new Vec2(blockWorldPos.x, blockWorldPos.y), worldPos);
                 if (distance <= this.BLOCK_SIZE / 2) return block;
@@ -135,8 +172,12 @@ export class xxl extends Component {
         return null;
     }
 
+    /**
+     * 触摸开始事件
+     */
     private onTouchStart(event: EventTouch) {
         if (this.isProcessing) return;
+
         const touchPos = event.getUILocation();
         const block = this.getBlockAtPosition(touchPos);
         if (block) {
@@ -155,8 +196,10 @@ export class xxl extends Component {
         }
     }
 
+    /**
+     * 检查方块是否有相邻方块
+     */
     private hasAdjacentBlock(block: BlockData): boolean {
-        // 检查上下左右四个方向是否有相邻方块
         const directions = [
             { row: -1, col: 0 }, // 上
             { row: 1, col: 0 },  // 下
@@ -168,21 +211,23 @@ export class xxl extends Component {
             const targetRow = block.row + dir.row;
             const targetCol = block.col + dir.col;
 
-            // 检查是否在边界内
             if (targetRow >= 0 && targetRow < this.GRID_ROWS &&
                 targetCol >= 0 && targetCol < this.GRID_COLS) {
                 const adjacentBlock = this.boardModel.getBlock(targetRow, targetCol);
                 if (adjacentBlock) {
-                    return true; // 找到相邻方块
+                    return true;
                 }
             }
         }
-
-        return false; // 没有相邻方块
+        return false;
     }
 
+    /**
+     * 触摸移动事件
+     */
     private onTouchMove(event: EventTouch) {
         if (!this.dragBlock) return;
+
         const touchPos = event.getUILocation();
         const deltaX = touchPos.x - this.dragStartPos.x;
         const deltaY = touchPos.y - this.dragStartPos.y;
@@ -243,12 +288,49 @@ export class xxl extends Component {
         }
     }
 
+    /**
+     * 检查指定方向是否有相邻方块
+     */
+    private hasAdjacentBlockInDirection(block: BlockData, direction: string): boolean {
+        let targetRow = block.row;
+        let targetCol = block.col;
+
+        switch (direction) {
+            case 'up':
+                targetRow = block.row - 1;
+                break;
+            case 'down':
+                targetRow = block.row + 1;
+                break;
+            case 'left':
+                targetCol = block.col - 1;
+                break;
+            case 'right':
+                targetCol = block.col + 1;
+                break;
+        }
+
+        if (targetRow >= 0 && targetRow < this.GRID_ROWS &&
+            targetCol >= 0 && targetCol < this.GRID_COLS) {
+            const adjacentBlock = this.boardModel.getBlock(targetRow, targetCol);
+            return adjacentBlock !== null;
+        }
+
+        return false;
+    }
+
+    /**
+     * 获取方块的原始位置
+     */
     private getBlockOriginalPosition(block: BlockData): Vec3 {
         const x = -(this.GRID_COLS - 1) * this.BLOCK_SIZE / 2 + block.col * this.BLOCK_SIZE;
         const y = (this.GRID_ROWS - 1) * this.BLOCK_SIZE / 2 - block.row * this.BLOCK_SIZE;
         return new Vec3(x, y, 0);
     }
 
+    /**
+     * 根据方向获取相邻方块
+     */
     private getAdjacentBlockByDirection(block: BlockData, direction: string): BlockData | null {
         let targetRow = block.row;
         let targetCol = block.col;
@@ -274,6 +356,9 @@ export class xxl extends Component {
         return null;
     }
 
+    /**
+     * 触摸结束事件
+     */
     private async onTouchEnd(event: EventTouch) {
         if (!this.dragBlock) return;
         if (!this.isDragging) {
@@ -293,26 +378,9 @@ export class xxl extends Component {
         this.dragBlock = null;
     }
 
-    private resetBlockNode(block: BlockData) {
-        // 复位拖拽的方块
-        const dragNode = this.blockNodeMap.get(block);
-        if (dragNode) {
-            const x = -(this.GRID_COLS - 1) * this.BLOCK_SIZE / 2 + block.col * this.BLOCK_SIZE;
-            const y = (this.GRID_ROWS - 1) * this.BLOCK_SIZE / 2 - block.row * this.BLOCK_SIZE;
-            tween(dragNode).to(0.2, { position: new Vec3(x, y, 0) }).start();
-        }
-
-        // 复位相邻方块
-        const adjacentBlock = this.getAdjacentBlockByDirection(block, this.dragDirection);
-        if (adjacentBlock) {
-            const adjacentNode = this.blockNodeMap.get(adjacentBlock);
-            if (adjacentNode) {
-                const adjacentOriginalPos = this.getBlockOriginalPosition(adjacentBlock);
-                tween(adjacentNode).to(0.2, { position: adjacentOriginalPos }).start();
-            }
-        }
-    }
-
+    /**
+     * 尝试交换方块
+     */
     private async trySwapBlocks(a: BlockData, b: BlockData) {
         this.isProcessing = true;
 
@@ -335,6 +403,9 @@ export class xxl extends Component {
         this.isProcessing = false;
     }
 
+    /**
+     * 复位所有方块到原始位置
+     */
     private async resetAllBlocksToOriginalPosition(): Promise<void> {
         return new Promise(resolve => {
             let finished = 0;
@@ -375,6 +446,9 @@ export class xxl extends Component {
         });
     }
 
+    /**
+     * 更新方块精灵
+     */
     private updateBlockSprites(blocks: BlockData[]) {
         for (const block of blocks) {
             const node = this.blockNodeMap.get(block);
@@ -385,34 +459,9 @@ export class xxl extends Component {
         }
     }
 
-    private animateSwap(a: BlockData, b: BlockData): Promise<void> {
-        return new Promise(resolve => {
-            const nodeA = this.blockNodeMap.get(a);
-            const nodeB = this.blockNodeMap.get(b);
-            if (!nodeA || !nodeB) return resolve();
-
-            const posA = nodeA.getPosition();
-            const posB = nodeB.getPosition();
-            let finished = 0;
-
-            tween(nodeA)
-                .to(0.2, { position: posB })
-                .call(() => {
-                    finished++;
-                    if (finished === 2) resolve();
-                })
-                .start();
-
-            tween(nodeB)
-                .to(0.2, { position: posA })
-                .call(() => {
-                    finished++;
-                    if (finished === 2) resolve();
-                })
-                .start();
-        });
-    }
-
+    /**
+     * 处理消除流程
+     */
     private async handleElimination(matches: BlockData[][]) {
         const blocksToRemove = new Set<BlockData>();
         for (const match of matches) for (const block of match) blocksToRemove.add(block);
@@ -436,25 +485,34 @@ export class xxl extends Component {
         }
     }
 
-    private animateRemoveBlocks(blocks: BlockData[]): Promise<void> {
+    /**
+     * 消除方块动画
+     */
+    private async animateRemoveBlocks(blocks: BlockData[]): Promise<void> {
         return new Promise(resolve => {
             let finished = 0;
             for (const block of blocks) {
                 const node = this.blockNodeMap.get(block);
                 if (node) {
-                    tween(node)
-                        .to(0.2, { scale: new Vec3(0, 0, 0) })
-                        .call(() => {
-                            finished++;
-                            if (finished === blocks.length) resolve();
-                        })
-                        .start();
+                    node.destroy();
+                    finished++;
+                    if (finished === blocks.length) resolve();
+                    // tween(node)
+                    //     .to(0.2, { scale: new Vec3(0, 0, 0) })
+                    //     .call(() => {
+                    //         finished++;
+                    //         if (finished === blocks.length) resolve();
+                    //     })
+                    //     .start();
                 }
             }
             if (blocks.length === 0) resolve();
         });
     }
 
+    /**
+     * 方块下落动画
+     */
     private async animateDropBlocks(): Promise<void> {
         const dropPromises: Promise<void>[] = [];
 
@@ -489,6 +547,9 @@ export class xxl extends Component {
         await Promise.all(dropPromises);
     }
 
+    /**
+     * 填充新方块动画
+     */
     private async animateFillNewBlocks(): Promise<void> {
         const fillPromises: Promise<void>[] = [];
 
@@ -507,13 +568,13 @@ export class xxl extends Component {
                         const targetY = (this.GRID_ROWS - 1 - row) * this.BLOCK_SIZE - (this.GRID_ROWS - 1) * this.BLOCK_SIZE / 2;
 
                         node.setPosition(startX, startY, 0);
-                        node.setScale(new Vec3(0, 0, 1));
+                        // node.setScale(new Vec3(0, 0, 1));
 
                         const promise = new Promise<void>(resolve => {
                             tween(node)
                                 .to(0.3, {
                                     position: new Vec3(startX, targetY, 0),
-                                    scale: new Vec3(1, 1, 1)
+                                    // scale: new Vec3(1, 1, 1)
                                 })
                                 .call(() => resolve())
                                 .start();
@@ -527,35 +588,9 @@ export class xxl extends Component {
         await Promise.all(fillPromises);
     }
 
-    private hasAdjacentBlockInDirection(block: BlockData, direction: string): boolean {
-        let targetRow = block.row;
-        let targetCol = block.col;
-
-        switch (direction) {
-            case 'up':
-                targetRow = block.row - 1;
-                break;
-            case 'down':
-                targetRow = block.row + 1;
-                break;
-            case 'left':
-                targetCol = block.col - 1;
-                break;
-            case 'right':
-                targetCol = block.col + 1;
-                break;
-        }
-
-        // 检查是否在边界内
-        if (targetRow >= 0 && targetRow < this.GRID_ROWS &&
-            targetCol >= 0 && targetCol < this.GRID_COLS) {
-            const adjacentBlock = this.boardModel.getBlock(targetRow, targetCol);
-            return adjacentBlock !== null;
-        }
-
-        return false;
-    }
-
+    /**
+     * 组件销毁时清理事件监听
+     */
     onDestroy() {
         input.off(Input.EventType.TOUCH_START, this.onTouchStart, this);
         input.off(Input.EventType.TOUCH_MOVE, this.onTouchMove, this);
