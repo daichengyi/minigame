@@ -24,6 +24,8 @@ export class xxl extends Component {
     private dragBlock: BlockData | null = null;
     private dragStartPos: Vec2 = new Vec2();
     private dragOriginalPos: Vec3 = new Vec3();
+    private adjacentBlock: BlockData | null = null;
+    private adjacentOriginalPos: Vec3 = new Vec3();
     private isDragging: boolean = false;
     private isProcessing: boolean = false;
     private dragDirection: string = '';
@@ -191,6 +193,8 @@ export class xxl extends Component {
             this.dragBlock = block;
             this.dragStartPos = touchPos;
             this.dragDirection = '';
+            this.adjacentBlock = null;
+
             const node = this.blockNodeMap.get(block);
             if (node) this.dragOriginalPos = node.getPosition();
         }
@@ -234,26 +238,57 @@ export class xxl extends Component {
         const minDragDistance = 20;
         const totalDistance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
 
+        // 确定当前拖拽方向
+        let currentDirection = '';
+        const absDeltaX = Math.abs(deltaX);
+        const absDeltaY = Math.abs(deltaY);
+
+        if (absDeltaX > absDeltaY) {
+            currentDirection = deltaX > 0 ? 'right' : 'left';
+        } else {
+            currentDirection = deltaY > 0 ? 'up' : 'down';
+        }
+
         if (!this.isDragging && totalDistance >= minDragDistance) {
-            // 确定拖拽方向
-            const absDeltaX = Math.abs(deltaX);
-            const absDeltaY = Math.abs(deltaY);
-            let direction = '';
-
-            if (absDeltaX > absDeltaY) {
-                direction = deltaX > 0 ? 'right' : 'left';
-            } else {
-                direction = deltaY > 0 ? 'up' : 'down';
-            }
-
             // 检查该方向是否有相邻方块
-            if (this.hasAdjacentBlockInDirection(this.dragBlock, direction)) {
+            if (this.hasAdjacentBlockInDirection(this.dragBlock, currentDirection)) {
                 this.isDragging = true;
-                this.dragDirection = direction;
+                this.dragDirection = currentDirection;
+                // 保存相邻方块信息
+                this.adjacentBlock = this.getAdjacentBlockByDirection(this.dragBlock, currentDirection);
+                if (this.adjacentBlock) {
+                    this.adjacentOriginalPos = this.getBlockOriginalPosition(this.adjacentBlock);
+                }
             }
         }
 
-        if (!this.isDragging) return;
+        if (!this.isDragging) {
+            return;
+        }
+
+        // 检查方向是否改变
+        if (this.dragDirection !== currentDirection) {
+            // 方向改变了，先复位上一个方向的相邻方块
+            if (this.adjacentBlock) {
+                const adjacentNode = this.blockNodeMap.get(this.adjacentBlock);
+                if (adjacentNode) {
+                    adjacentNode.setPosition(this.adjacentOriginalPos.x, this.adjacentOriginalPos.y, 0);
+                }
+            }
+
+            // 检查新方向是否有相邻方块
+            if (this.hasAdjacentBlockInDirection(this.dragBlock, currentDirection)) {
+                this.dragDirection = currentDirection;
+                // 更新相邻方块信息
+                this.adjacentBlock = this.getAdjacentBlockByDirection(this.dragBlock, currentDirection);
+                if (this.adjacentBlock) {
+                    this.adjacentOriginalPos = this.getBlockOriginalPosition(this.adjacentBlock);
+                }
+            } else {
+                // 新方向没有相邻方块，保持原方向
+                return;
+            }
+        }
 
         // 限制只能沿一个方向拖拽
         let moveX = 0;
@@ -278,12 +313,10 @@ export class xxl extends Component {
         }
 
         // 同步移动相邻方块（反向移动）
-        const adjacentBlock = this.getAdjacentBlockByDirection(this.dragBlock, this.dragDirection);
-        if (adjacentBlock) {
-            const adjacentNode = this.blockNodeMap.get(adjacentBlock);
+        if (this.adjacentBlock) {
+            const adjacentNode = this.blockNodeMap.get(this.adjacentBlock);
             if (adjacentNode) {
-                const adjacentOriginalPos = this.getBlockOriginalPosition(adjacentBlock);
-                adjacentNode.setPosition(adjacentOriginalPos.x - moveX, adjacentOriginalPos.y - moveY, 0);
+                adjacentNode.setPosition(this.adjacentOriginalPos.x - moveX, this.adjacentOriginalPos.y - moveY, 0);
             }
         }
     }
@@ -364,18 +397,27 @@ export class xxl extends Component {
         if (!this.isDragging) {
             this.isDragging = false;
             this.dragBlock = null;
+            this.adjacentBlock = null;
             return;
         }
 
-        const targetBlock = this.getAdjacentBlockByDirection(this.dragBlock, this.dragDirection);
-        if (targetBlock) {
-            await this.trySwapBlocks(this.dragBlock, targetBlock);
+        // 先复位相邻方块到原始位置
+        if (this.adjacentBlock) {
+            const adjacentNode = this.blockNodeMap.get(this.adjacentBlock);
+            if (adjacentNode) {
+                adjacentNode.setPosition(this.adjacentOriginalPos.x, this.adjacentOriginalPos.y, 0);
+            }
+        }
+
+        if (this.adjacentBlock) {
+            await this.trySwapBlocks(this.dragBlock, this.adjacentBlock);
         } else {
             // 复位所有方块到原始位置
             await this.resetAllBlocksToOriginalPosition();
         }
         this.isDragging = false;
         this.dragBlock = null;
+        this.adjacentBlock = null;
     }
 
     /**
@@ -389,18 +431,32 @@ export class xxl extends Component {
 
         // 交换数据
         this.gameLogic.swapBlocks(a, b);
-        this.updateBlockSprites([a, b]);
 
         const matches = this.gameLogic.findMatches();
         if (matches.length > 0) {
+            // 有匹配时，更新精灵并处理消除
+            this.updateBlockSprites([a, b]);
             await this.handleElimination(matches);
         } else {
             // 没有匹配，交换数据回来
             this.gameLogic.swapBlocks(a, b);
-            this.updateBlockSprites([a, b]);
+            // 不需要更新精灵，因为数据已经交换回来了
         }
 
         this.isProcessing = false;
+    }
+
+    /**
+     * 更新方块精灵
+     */
+    private updateBlockSprites(blocks: BlockData[]) {
+        for (const block of blocks) {
+            const node = this.blockNodeMap.get(block);
+            if (node) {
+                const sprite = node.getComponent(Sprite);
+                if (sprite) sprite.spriteFrame = this.blockSprites[block.type];
+            }
+        }
     }
 
     /**
@@ -444,19 +500,6 @@ export class xxl extends Component {
                 }
             }
         });
-    }
-
-    /**
-     * 更新方块精灵
-     */
-    private updateBlockSprites(blocks: BlockData[]) {
-        for (const block of blocks) {
-            const node = this.blockNodeMap.get(block);
-            if (node) {
-                const sprite = node.getComponent(Sprite);
-                if (sprite) sprite.spriteFrame = this.blockSprites[block.type];
-            }
-        }
     }
 
     /**
