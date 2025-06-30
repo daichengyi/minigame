@@ -6,6 +6,9 @@ import { BlockType, BlockTypeUtil } from './model/BlockType';
 import { DragDirection, DragDirectionUtil } from './model/DragDirection';
 import { GameLogic } from './service/GameLogic';
 
+/**
+ * 消消乐
+ */
 @ccclass('xxl')
 export class xxl extends Component {
     @property(Node) private content: Node = null!;
