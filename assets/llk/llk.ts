@@ -14,6 +14,11 @@ interface PathPoint {
     col: number;
 }
 
+interface GridNode {
+    row: number;
+    col: number;
+}
+
 /**
  * 连连看
  */
@@ -29,6 +34,10 @@ export class llk extends Component {
     private BLOCK_HEIGHT: number = 60;
     private readonly BLOCK_SPACING: number = 2;
 
+    // 扩展边界后的网格大小
+    private GRID_ROWS: number = 14; // ROWS + 2
+    private GRID_COLS: number = 12; // COLS + 2
+
     // 游戏状态
     private blocks: BlockData[][] = [];
     private selectedBlocks: BlockData[] = [];
@@ -36,6 +45,11 @@ export class llk extends Component {
     private spriteFrames: SpriteFrame[] = [];
     private lineNode: Node = null!;
     private graphics: Graphics = null!;
+    private gridNode: Node = null!;
+    private gridGraphics: Graphics = null!;
+
+    // 网格状态：0=空，1=有方块，2=边界
+    private grid: number[][] = [];
 
     start() {
         this.initGame();
@@ -44,6 +58,7 @@ export class llk extends Component {
     private async initGame() {
         await this.loadResources();
         this.calculateBlockSize();
+        this.initGrid();
         this.initLineNode();
         this.generateBlockTypes();
         this.createBlocks();
@@ -83,6 +98,23 @@ export class llk extends Component {
         }
     }
 
+    private initGrid() {
+        // 初始化网格
+        this.grid = [];
+        for (let row = 0; row < this.GRID_ROWS; row++) {
+            this.grid[row] = [];
+            for (let col = 0; col < this.GRID_COLS; col++) {
+                // 边界设置为2，内部区域设置为0
+                if (row === 0 || row === this.GRID_ROWS - 1 ||
+                    col === 0 || col === this.GRID_COLS - 1) {
+                    this.grid[row][col] = 2; // 边界
+                } else {
+                    this.grid[row][col] = 0; // 空
+                }
+            }
+        }
+    }
+
     private initLineNode() {
         // 创建连线节点
         this.lineNode = new Node('LineNode');
@@ -103,6 +135,88 @@ export class llk extends Component {
         // this.lineNode.setSiblingIndex(999);
 
         console.log('连线节点初始化完成');
+
+        // 创建独立的网格节点
+        this.initGridNode();
+    }
+
+    private initGridNode() {
+        console.log('开始初始化网格节点...');
+
+        // 创建网格节点
+        this.gridNode = new Node('GridNode');
+        this.gridGraphics = this.gridNode.addComponent(Graphics);
+
+        // 确保节点激活
+        this.gridNode.active = true;
+        this.gridNode.layer = this.content.layer;
+
+        // 添加到content节点，确保在连线节点之前（在背景）
+        this.content.addChild(this.gridNode);
+        this.gridNode.setSiblingIndex(0); // 设置为最底层
+
+        console.log('网格节点初始化完成');
+        console.log('gridNode:', this.gridNode);
+        console.log('gridGraphics:', this.gridGraphics);
+        console.log('content children count:', this.content.children.length);
+
+        // 绘制网格
+        // this.drawAStartGrid();
+    }
+
+    // 绘制网格
+    private drawAStartGrid() {
+        if (!this.gridGraphics) {
+            console.log('gridGraphics不存在');
+            return;
+        }
+
+        console.log('开始绘制网格...');
+        console.log('GRID_ROWS:', this.GRID_ROWS, 'GRID_COLS:', this.GRID_COLS);
+        console.log('BLOCK_WIDTH:', this.BLOCK_WIDTH, 'BLOCK_HEIGHT:', this.BLOCK_HEIGHT);
+
+        // 清除之前的网格
+        this.gridGraphics.clear();
+
+        // 设置网格样式
+        this.gridGraphics.strokeColor = new Color(255, 255, 255, 255); // 白色，不透明，更容易看到
+        this.gridGraphics.lineWidth = 4;
+
+        // 以content为中心计算起始位置
+        const totalWidth = this.COLS * this.BLOCK_WIDTH + (this.COLS - 1) * this.BLOCK_SPACING;
+        const totalHeight = this.ROWS * this.BLOCK_HEIGHT + (this.ROWS - 1) * this.BLOCK_SPACING;
+        const startX = -totalWidth / 2;
+        const startY = totalHeight / 2;
+
+        console.log('起始位置:', startX, startY);
+
+        // 绘制垂直线（列）
+        for (let col = 0; col <= this.GRID_COLS; col++) {
+            const x = startX + (col - 1) * (this.BLOCK_WIDTH + this.BLOCK_SPACING);
+            const topY = startY + (this.BLOCK_HEIGHT + this.BLOCK_SPACING);
+            const bottomY = startY - this.ROWS * (this.BLOCK_HEIGHT + this.BLOCK_SPACING);
+
+            console.log(`垂直线 ${col}: x=${x}, topY=${topY}, bottomY=${bottomY}`);
+
+            this.gridGraphics.moveTo(x, topY);
+            this.gridGraphics.lineTo(x, bottomY);
+        }
+
+        // 绘制水平线（行）
+        for (let row = 0; row <= this.GRID_ROWS; row++) {
+            const y = startY - (row - 1) * (this.BLOCK_HEIGHT + this.BLOCK_SPACING);
+            const leftX = startX - (this.BLOCK_WIDTH + this.BLOCK_SPACING);
+            const rightX = startX + this.COLS * (this.BLOCK_WIDTH + this.BLOCK_SPACING);
+
+            console.log(`水平线 ${row}: y=${y}, leftX=${leftX}, rightX=${rightX}`);
+
+            this.gridGraphics.moveTo(leftX, y);
+            this.gridGraphics.lineTo(rightX, y);
+        }
+
+        this.gridGraphics.stroke();
+
+        console.log('网格绘制完成');
     }
 
     private generateBlockTypes() {
@@ -124,11 +238,11 @@ export class llk extends Component {
     }
 
     private createBlocks() {
-        // 清空现有方块，但保留LineNode
+        // 清空现有方块，但保留LineNode和GridNode
         const children = this.content.children;
         for (let i = children.length - 1; i >= 0; i--) {
             const child = children[i];
-            if (child.name !== 'LineNode') {
+            if (child.name !== 'LineNode' && child.name !== 'GridNode') {
                 child.destroy();
             }
         }
@@ -136,9 +250,14 @@ export class llk extends Component {
         this.blocks = [];
         this.selectedBlocks = [];
 
-        // 计算起始位置
-        const startX = -(this.COLS - 1) * (this.BLOCK_WIDTH + this.BLOCK_SPACING) / 2;
-        const startY = (this.ROWS - 1) * (this.BLOCK_HEIGHT + this.BLOCK_SPACING) / 2;
+        // 重新初始化网格
+        this.initGrid();
+
+        // 以content为中心计算起始位置
+        const totalWidth = this.COLS * this.BLOCK_WIDTH + (this.COLS - 1) * this.BLOCK_SPACING;
+        const totalHeight = this.ROWS * this.BLOCK_HEIGHT + (this.ROWS - 1) * this.BLOCK_SPACING;
+        const startX = -totalWidth / 2;
+        const startY = totalHeight / 2;
 
         let blockIndex = 0;
 
@@ -156,9 +275,12 @@ export class llk extends Component {
 
                 this.blocks[row][col] = blockData;
 
+                // 在网格中标记方块位置（注意偏移1，因为网格有边界）
+                this.grid[row + 1][col + 1] = 1;
+
                 // 设置位置
-                const x = startX + col * (this.BLOCK_WIDTH + this.BLOCK_SPACING);
-                const y = startY - row * (this.BLOCK_HEIGHT + this.BLOCK_SPACING);
+                const x = startX + col * (this.BLOCK_WIDTH + this.BLOCK_SPACING) + this.BLOCK_WIDTH / 2;
+                const y = startY - row * (this.BLOCK_HEIGHT + this.BLOCK_SPACING) - this.BLOCK_HEIGHT / 2;
                 blockNode.setPosition(x, y, 0);
 
                 // 设置图片
@@ -171,6 +293,9 @@ export class llk extends Component {
                 this.content.addChild(blockNode);
             }
         }
+
+        // 重新绘制网格
+        // this.drawAStartGrid();
     }
 
     private createBlockNode(): Node {
@@ -275,16 +400,24 @@ export class llk extends Component {
     }
 
     private eliminateBlocks() {
+        console.log('开始消除方块...');
+
         // 消除选中的方块
         this.selectedBlocks.forEach(block => {
+            console.log(`消除方块: (${block.row}, ${block.col})`);
             block.node.destroy();
             this.blocks[block.row][block.col] = null!;
+            // 更新网格状态
+            this.grid[block.row + 1][block.col + 1] = 0;
+            console.log(`网格状态更新: grid[${block.row + 1}][${block.col + 1}] = 0`);
         });
 
         this.selectedBlocks = [];
 
         // 检查游戏是否结束
         this.checkGameEnd();
+
+        console.log('方块消除完成');
     }
 
     private checkGameEnd() {
@@ -336,191 +469,200 @@ export class llk extends Component {
             ];
         }
 
-        // 2. 检查无遮挡连线连接
-        const connectionPath = this.findOpenDirectionConnection(block1, block2);
-        if (connectionPath) {
-            console.log('无遮挡连线连接可行');
-            return connectionPath;
+        // 2. 使用A*寻路查找连接路径
+        const path = this.findPathAStar(block1, block2);
+        if (path) {
+            console.log('A*寻路找到路径');
+            return path;
         }
 
         console.log('无法找到连接路径');
         return null;
     }
 
-    // 查找无遮挡方向连接
-    private findOpenDirectionConnection(block1: BlockData, block2: BlockData): PathPoint[] | null {
-        // 获取两个方块的无遮挡方向
-        const directions1 = this.getOpenDirections(block1);
-        const directions2 = this.getOpenDirections(block2);
+    // A*寻路算法
+    private findPathAStar(block1: BlockData, block2: BlockData): PathPoint[] | null {
+        console.log('A*寻路开始:', block1.row, block1.col, '->', block2.row, block2.col);
 
-        console.log('方块1无遮挡方向:', directions1);
-        console.log('方块2无遮挡方向:', directions2);
+        // 打印当前网格状态
+        this.printGridState();
 
-        // 检查所有可能的无遮挡方向组合
-        for (const dir1 of directions1) {
-            if (dir1.isOpen) {
-                for (const dir2 of directions2) {
-                    if (dir2.isOpen) {
-                        // 尝试通过这两个方向连接
-                        const path = this.tryConnectViaDirections(block1, block2, dir1.direction, dir2.direction);
-                        if (path) {
-                            console.log('找到无遮挡方向连接:', dir1.direction, '->', dir2.direction);
-                            return path;
-                        }
-                    }
+        // 获取两个方块周围的空位置作为起点和终点
+        const startPositions = this.getEmptyPositionsAround(block1);
+        const endPositions = this.getEmptyPositionsAround(block2);
+
+        console.log('起点候选位置:', startPositions);
+        console.log('终点候选位置:', endPositions);
+
+        // 尝试所有起点和终点的组合
+        for (const startPos of startPositions) {
+            for (const endPos of endPositions) {
+                const path = this.findPathBetweenPositions(startPos, endPos);
+                if (path) {
+                    console.log('找到路径:', startPos, '->', endPos);
+                    return this.buildFinalPath(path, block1, block2);
                 }
             }
         }
 
+        console.log('A*寻路失败');
         return null;
     }
 
-    // 尝试通过指定方向连接两个方块
-    private tryConnectViaDirections(block1: BlockData, block2: BlockData, dir1: string, dir2: string): PathPoint[] | null {
-        // 获取两个方块在指定方向的延伸点
-        const point1 = this.getExtendedPoint(block1, dir1);
-        const point2 = this.getExtendedPoint(block2, dir2);
+    // 获取方块周围的空位置
+    private getEmptyPositionsAround(block: BlockData): GridNode[] {
+        const positions: GridNode[] = [];
+        const gridRow = block.row + 1;
+        const gridCol = block.col + 1;
 
-        // 检查这两个延伸点之间是否可以连接
-        if (this.canConnectPoints(point1, point2)) {
-            return [
-                { row: block1.row, col: block1.col },
-                point1,
-                point2,
-                { row: block2.row, col: block2.col }
-            ];
-        }
-
-        return null;
-    }
-
-    // 获取方块在指定方向的延伸点
-    private getExtendedPoint(block: BlockData, direction: string): PathPoint {
-        const { row, col } = block;
-
-        switch (direction) {
-            case 'up':
-                return { row: -1, col: col }; // 上边界
-            case 'down':
-                return { row: this.ROWS, col: col }; // 下边界
-            case 'left':
-                return { row: row, col: -1 }; // 左边界
-            case 'right':
-                return { row: row, col: this.COLS }; // 右边界
-            default:
-                return { row: row, col: col };
-        }
-    }
-
-    // 检查两个点之间是否可以连接
-    private canConnectPoints(point1: PathPoint, point2: PathPoint): boolean {
-        // 如果两个点都是边界点，应该通过边界连接检查
-        if (this.isBoundaryPoint(point1) && this.isBoundaryPoint(point2)) {
-            return this.canConnectBoundaryPoints(point1, point2);
-        }
-
-        // 如果只有一个点是边界点，也可以连接
-        if (this.isBoundaryPoint(point1) || this.isBoundaryPoint(point2)) {
-            return true;
-        }
-
-        // 普通点之间的连接，目前简化处理
-        return true;
-    }
-
-    // 检查是否是边界点
-    private isBoundaryPoint(point: PathPoint): boolean {
-        return point.row === -1 || point.row === this.ROWS ||
-            point.col === -1 || point.col === this.COLS;
-    }
-
-    // 检查边界点之间的连接
-    private canConnectBoundaryPoints(point1: PathPoint, point2: PathPoint): boolean {
-        // 如果两个点在同一边界，直接可以连接
-        if (point1.row === point2.row && (point1.row === -1 || point1.row === this.ROWS)) {
-            return true; // 上下边界
-        }
-        if (point1.col === point2.col && (point1.col === -1 || point1.col === this.COLS)) {
-            return true; // 左右边界
-        }
-
-        // 如果两个点在不同边界，检查拐角点
-        return this.canConnectViaCorner(point1, point2);
-    }
-
-    // 检查通过拐角连接
-    private canConnectViaCorner(point1: PathPoint, point2: PathPoint): boolean {
-        // 尝试找到拐角点
-        const cornerPoints = [
-            { row: point1.row, col: point2.col },
-            { row: point2.row, col: point1.col }
+        // 检查四个方向
+        const directions = [
+            { row: -1, col: 0 }, // 上
+            { row: 1, col: 0 },  // 下
+            { row: 0, col: -1 }, // 左
+            { row: 0, col: 1 }   // 右
         ];
 
-        for (const corner of cornerPoints) {
-            if (this.isValidCorner(corner)) {
-                return true;
+        for (const dir of directions) {
+            const newRow = gridRow + dir.row;
+            const newCol = gridCol + dir.col;
+
+            // 检查边界
+            if (newRow >= 0 && newRow < this.GRID_ROWS &&
+                newCol >= 0 && newCol < this.GRID_COLS) {
+                // 检查是否为空
+                if (this.grid[newRow][newCol] !== 1) {
+                    positions.push({ row: newRow, col: newCol });
+                }
             }
         }
 
-        return false;
+        return positions;
     }
 
-    // 检查是否是有效的拐角点
-    private isValidCorner(point: PathPoint): boolean {
-        // 拐角点必须在边界上且不在游戏区域内
-        return (point.row === -1 || point.row === this.ROWS ||
-            point.col === -1 || point.col === this.COLS);
-    }
+    // 在两个位置之间寻找路径
+    private findPathBetweenPositions(start: GridNode, end: GridNode): GridNode[] | null {
+        const openSet: GridNode[] = [];
+        const closedSet: Set<string> = new Set();
+        const cameFrom: Map<string, GridNode> = new Map();
+        const gScore: Map<string, number> = new Map();
+        const fScore: Map<string, number> = new Map();
 
-    // 检查普通点之间的直线连接
-    private canConnectDirectlyPoints(point1: PathPoint, point2: PathPoint): boolean {
-        // 如果两个点都是边界点，应该通过边界连接检查
-        if (this.isBoundaryPoint(point1) && this.isBoundaryPoint(point2)) {
-            return this.canConnectBoundaryPoints(point1, point2);
+        openSet.push(start);
+        gScore.set(this.nodeKey(start), 0);
+        fScore.set(this.nodeKey(start), this.heuristic(start, end));
+
+        while (openSet.length > 0) {
+            // 找到fScore最小的节点
+            let currentIndex = 0;
+            for (let i = 1; i < openSet.length; i++) {
+                if (fScore.get(this.nodeKey(openSet[i])) < fScore.get(this.nodeKey(openSet[currentIndex]))) {
+                    currentIndex = i;
+                }
+            }
+
+            const current = openSet[currentIndex];
+
+            // 到达目标
+            if (current.row === end.row && current.col === end.col) {
+                return this.reconstructPathFromPositions(cameFrom, current);
+            }
+
+            openSet.splice(currentIndex, 1);
+            closedSet.add(this.nodeKey(current));
+
+            // 检查四个方向的邻居
+            const neighbors = this.getNeighbors(current);
+            for (const neighbor of neighbors) {
+                if (closedSet.has(this.nodeKey(neighbor))) {
+                    continue;
+                }
+
+                const tentativeGScore = gScore.get(this.nodeKey(current)) + 1;
+
+                if (!openSet.some(node => node.row === neighbor.row && node.col === neighbor.col)) {
+                    openSet.push(neighbor);
+                } else if (tentativeGScore >= gScore.get(this.nodeKey(neighbor))) {
+                    continue;
+                }
+
+                cameFrom.set(this.nodeKey(neighbor), current);
+                gScore.set(this.nodeKey(neighbor), tentativeGScore);
+                fScore.set(this.nodeKey(neighbor), tentativeGScore + this.heuristic(neighbor, end));
+            }
         }
 
-        // 如果只有一个点是边界点，也可以连接
-        if (this.isBoundaryPoint(point1) || this.isBoundaryPoint(point2)) {
-            return true;
+        return null;
+    }
+
+    // 重建位置路径
+    private reconstructPathFromPositions(cameFrom: Map<string, GridNode>, current: GridNode): GridNode[] {
+        const path: GridNode[] = [];
+        let currentKey = this.nodeKey(current);
+
+        while (cameFrom.has(currentKey)) {
+            path.unshift(current);
+            current = cameFrom.get(currentKey)!;
+            currentKey = this.nodeKey(current);
         }
 
-        // 普通点之间的连接，目前简化处理
-        return true;
+        path.unshift(current);
+        return path;
     }
 
-    // 检查是否相邻
-    private isAdjacent(block1: BlockData, block2: BlockData): boolean {
-        const rowDiff = Math.abs(block1.row - block2.row);
-        const colDiff = Math.abs(block1.col - block2.col);
-        return (rowDiff === 1 && colDiff === 0) || (rowDiff === 0 && colDiff === 1);
+    // 构建最终路径
+    private buildFinalPath(path: GridNode[], block1: BlockData, block2: BlockData): PathPoint[] {
+        const result: PathPoint[] = [];
+
+        // 添加起点方块
+        result.push({ row: block1.row, col: block1.col });
+
+        // 添加路径点（转换回游戏坐标）
+        for (const node of path) {
+            result.push({ row: node.row - 1, col: node.col - 1 });
+        }
+
+        // 添加终点方块
+        result.push({ row: block2.row, col: block2.col });
+
+        return result;
     }
 
-    // 检查方块四周是否有无遮挡方向
-    private getOpenDirections(block: BlockData): { direction: string, isOpen: boolean }[] {
-        const { row, col } = block;
+    // 获取邻居节点
+    private getNeighbors(node: GridNode): GridNode[] {
+        const neighbors: GridNode[] = [];
         const directions = [
-            { direction: 'up', isOpen: row > 0 && !this.blocks[row - 1][col] },
-            { direction: 'down', isOpen: row < this.ROWS - 1 && !this.blocks[row + 1][col] },
-            { direction: 'left', isOpen: col > 0 && !this.blocks[row][col - 1] },
-            { direction: 'right', isOpen: col < this.COLS - 1 && !this.blocks[row][col + 1] }
+            { row: -1, col: 0 }, // 上
+            { row: 1, col: 0 },  // 下
+            { row: 0, col: -1 }, // 左
+            { row: 0, col: 1 }   // 右
         ];
 
-        // 边界方块可以向边界方向延伸
-        if (row === 0) {
-            directions[0].isOpen = true; // 上边界可以向上延伸
-        }
-        if (row === this.ROWS - 1) {
-            directions[1].isOpen = true; // 下边界可以向下延伸
-        }
-        if (col === 0) {
-            directions[2].isOpen = true; // 左边界可以向左延伸
-        }
-        if (col === this.COLS - 1) {
-            directions[3].isOpen = true; // 右边界可以向右延伸
+        for (const dir of directions) {
+            const newRow = node.row + dir.row;
+            const newCol = node.col + dir.col;
+
+            // 检查边界
+            if (newRow >= 0 && newRow < this.GRID_ROWS &&
+                newCol >= 0 && newCol < this.GRID_COLS) {
+                // 检查是否可以通行（空或边界）
+                if (this.grid[newRow][newCol] !== 1) {
+                    neighbors.push({ row: newRow, col: newCol });
+                }
+            }
         }
 
-        console.log(`方块(${row},${col})四周情况:`, directions);
-        return directions;
+        return neighbors;
+    }
+
+    // 启发式函数（曼哈顿距离）
+    private heuristic(node: GridNode, goal: GridNode): number {
+        return Math.abs(node.row - goal.row) + Math.abs(node.col - goal.col);
+    }
+
+    // 节点键值
+    private nodeKey(node: GridNode): string {
+        return `${node.row},${node.col}`;
     }
 
     // 绘制连线
@@ -556,45 +698,16 @@ export class llk extends Component {
 
     // 获取世界坐标
     private getWorldPosition(row: number, col: number): Vec3 {
-        // 计算起始位置（与createBlocks方法保持一致）
-        const startX = -(this.COLS - 1) * (this.BLOCK_WIDTH + this.BLOCK_SPACING) / 2;
-        const startY = (this.ROWS - 1) * (this.BLOCK_HEIGHT + this.BLOCK_SPACING) / 2;
+        // 以content为中心计算起始位置
+        const totalWidth = this.COLS * this.BLOCK_WIDTH + (this.COLS - 1) * this.BLOCK_SPACING;
+        const totalHeight = this.ROWS * this.BLOCK_HEIGHT + (this.ROWS - 1) * this.BLOCK_SPACING;
+        const startX = -totalWidth / 2;
+        const startY = totalHeight / 2;
 
-        // 对于边界点，计算延伸位置
-        if (row === -1) {
-            // 上边界，向上延伸15像素
-            return new Vec3(
-                startX + col * (this.BLOCK_WIDTH + this.BLOCK_SPACING),
-                startY + 15,
-                0
-            );
-        } else if (row === this.ROWS) {
-            // 下边界，向下延伸15像素
-            return new Vec3(
-                startX + col * (this.BLOCK_WIDTH + this.BLOCK_SPACING),
-                startY - this.ROWS * (this.BLOCK_HEIGHT + this.BLOCK_SPACING) - 15,
-                0
-            );
-        } else if (col === -1) {
-            // 左边界，向左延伸15像素
-            return new Vec3(
-                startX - 15,
-                startY - row * (this.BLOCK_HEIGHT + this.BLOCK_SPACING),
-                0
-            );
-        } else if (col === this.COLS) {
-            // 右边界，向右延伸15像素
-            return new Vec3(
-                startX + this.COLS * (this.BLOCK_WIDTH + this.BLOCK_SPACING) + 15,
-                startY - row * (this.BLOCK_HEIGHT + this.BLOCK_SPACING),
-                0
-            );
-        } else {
-            // 普通方块位置
-            const x = startX + col * (this.BLOCK_WIDTH + this.BLOCK_SPACING);
-            const y = startY - row * (this.BLOCK_HEIGHT + this.BLOCK_SPACING);
-            return new Vec3(x, y, 0);
-        }
+        // 普通方块位置
+        const x = startX + col * (this.BLOCK_WIDTH + this.BLOCK_SPACING) + this.BLOCK_WIDTH / 2;
+        const y = startY - row * (this.BLOCK_HEIGHT + this.BLOCK_SPACING) - this.BLOCK_HEIGHT / 2;
+        return new Vec3(x, y, 0);
     }
 
     // 清除连线
@@ -602,5 +715,24 @@ export class llk extends Component {
         if (this.graphics) {
             this.graphics.clear();
         }
+    }
+
+    // 打印网格状态（调试用）
+    private printGridState() {
+        console.log('当前网格状态:');
+        for (let row = 0; row < this.GRID_ROWS; row++) {
+            let rowStr = '';
+            for (let col = 0; col < this.GRID_COLS; col++) {
+                rowStr += this.grid[row][col] + ' ';
+            }
+            console.log(`行${row}: ${rowStr}`);
+        }
+    }
+
+    // 检查是否相邻
+    private isAdjacent(block1: BlockData, block2: BlockData): boolean {
+        const rowDiff = Math.abs(block1.row - block2.row);
+        const colDiff = Math.abs(block1.col - block2.col);
+        return (rowDiff === 1 && colDiff === 0) || (rowDiff === 0 && colDiff === 1);
     }
 }
