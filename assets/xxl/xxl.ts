@@ -378,8 +378,8 @@ export class xxl extends Component {
             if (this.adjacentBlock) {
                 await this.trySwapBlocks(this.dragBlock, this.adjacentBlock);
             } else {
-                // 复位所有方块到原始位置
-                await this.resetAllBlocksToOriginalPosition();
+                // 复位方块到原始位置
+                await this.resetSpecificBlocksToOriginalPosition([this.dragBlock, this.adjacentBlock]);
             }
         }
         this.isDragging = false;
@@ -393,21 +393,21 @@ export class xxl extends Component {
     private async trySwapBlocks(a: BlockData, b: BlockData) {
         this.isProcessing = true;
 
-        // 先复位所有方块到原始位置
-        await this.resetAllBlocksToOriginalPosition();
+        // 复位交换的方块到数据模型中的正确位置
+        await this.resetSpecificBlocksToOriginalPosition([a, b]);
 
         // 交换数据
         this.gameLogic.swapBlocks(a, b);
 
         const matches = this.gameLogic.findMatches();
         if (matches.length > 0) {
-            // 有匹配时，更新精灵并处理消除
+            // 更新精灵图片以匹配交换后的数据
             this.updateBlockSprites([a, b]);
+            // 处理消除逻辑
             await this.handleElimination(matches);
         } else {
-            // 没有匹配，交换数据回来
+            // 没有匹配，交换数据回来，只复位相关方块
             this.gameLogic.swapBlocks(a, b);
-            // 不需要更新精灵，因为数据已经交换回来了
         }
 
         this.isProcessing = false;
@@ -598,6 +598,41 @@ export class xxl extends Component {
         }
 
         await Promise.all(fillPromises);
+    }
+
+    /**
+     * 复位指定方块到原始位置
+     * @param blocks 需要复位的方块数组
+     */
+    private async resetSpecificBlocksToOriginalPosition(blocks: BlockData[]): Promise<void> {
+        return new Promise(resolve => {
+            let finished = 0;
+            const totalBlocks = blocks.length;
+
+            if (totalBlocks === 0) {
+                resolve();
+                return;
+            }
+
+            // 复位指定的方块
+            for (const block of blocks) {
+                const node = this.blockNodeMap.get(block);
+                if (node) {
+                    // 使用缓存的位置
+                    const originalPos = this.positionCache[block.row][block.col];
+                    tween(node)
+                        .to(0.1, { position: originalPos })
+                        .call(() => {
+                            finished++;
+                            if (finished === totalBlocks) resolve();
+                        })
+                        .start();
+                } else {
+                    finished++;
+                    if (finished === totalBlocks) resolve();
+                }
+            }
+        });
     }
 
     /**
