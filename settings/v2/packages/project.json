@@ -5,5 +5,11 @@
       "width": 750,
       "height": 1334
     }
-  }
+  },
+  "layer": [
+    {
+      "name": "game",
+      "value": 1
+    }
+  ]
 }
