@@ -1,5 +1,6 @@
 import { _decorator, Component, Node, Vec2 } from 'cc';
 import { JoystickController } from './scripts/controller/JoystickController';
+import { SnakeController } from './scripts/controller/SnakeController';
 const { ccclass, property } = _decorator;
 
 @ccclass('tcs')
@@ -11,10 +12,14 @@ export class tcs extends Component {
     private snake: Node = null!;
 
     private joystickController: JoystickController = null!;
+    private snakeController: SnakeController = null!;
 
     start() {
         // 初始化摇杆控制器
         this.initJoystickController();
+
+        // 初始化蛇控制器
+        this.initSnakeController();
     }
 
     // 初始化摇杆控制器
@@ -24,21 +29,29 @@ export class tcs extends Component {
         if (!this.joystickController) {
             this.joystickController = this.joystick.addComponent(JoystickController);
         }
-
-        // 设置摇杆方向变化回调
-        this.joystickController.setDirectionChangeCallback((direction: Vec2) => {
-            this.onJoystickDirectionChange(direction);
-        });
     }
 
-    // 摇杆方向变化回调
-    private onJoystickDirectionChange(direction: Vec2): void {
-        console.log('摇杆方向变化:', direction);
-        // TODO: 这里将处理蛇的移动方向
+    // 初始化蛇控制器
+    private initSnakeController(): void {
+        // 获取或添加SnakeController组件
+        this.snakeController = this.snake.getComponent(SnakeController);
+        if (!this.snakeController) {
+            this.snakeController = this.snake.addComponent(SnakeController);
+        }
     }
 
     update(deltaTime: number) {
-        // TODO: 游戏主循环逻辑
+        // 更新蛇的移动
+        if (this.snakeController) {
+            this.snakeController.update(deltaTime);
+
+            // 每2秒输出一次调试信息
+            if (Math.floor(Date.now() / 1000) % 2 === 0) {
+                this.snakeController.debugPathInfo();
+                this.snakeController.debugInterpolationInfo();
+                this.snakeController.debugNodeCount();
+            }
+        }
     }
 }
 

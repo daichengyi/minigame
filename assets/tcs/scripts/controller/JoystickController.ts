@@ -52,6 +52,10 @@ export class JoystickController extends Component {
 
         this.isDragging = true;
         this.joystickView.setActive(true);
+
+        // 确保摇杆模型被激活
+        this.joystickModel.isActive = true;
+
         this.updateJoystickPosition(touchPos);
     }
 
@@ -68,12 +72,16 @@ export class JoystickController extends Component {
         if (this.isDragging) {
             this.isDragging = false;
             this.joystickView.setActive(false);
+
+            // 先触发回调，再重置摇杆状态
+            this.triggerDirectionChange();
+            this.joystickModel.isActive = false;
         }
     }
 
     // 更新摇杆位置
     private updateJoystickPosition(touchPos: Vec2): void {
-        if (!this.joystickModel || !this.isDragging) return;
+        if (!this.isDragging) return;
 
         // 更新摇杆方向
         this.joystickModel.updateDirection(touchPos, this.centerPosition);
@@ -81,10 +89,8 @@ export class JoystickController extends Component {
         // 更新摇杆视图
         this.joystickView.updateJoystickPosition(touchPos, this.centerPosition);
 
-        // 检查角度是否有效并触发回调
-        if (this.joystickModel.isAngleValid()) {
-            this.triggerDirectionChange();
-        }
+        // 总是触发方向变化回调，让蛇控制器决定如何处理
+        this.triggerDirectionChange();
     }
 
     // 触发方向变化回调
@@ -101,12 +107,12 @@ export class JoystickController extends Component {
 
     // 获取当前摇杆方向
     getCurrentDirection(): Vec2 {
-        return this.joystickModel ? this.joystickModel.direction : new Vec2();
+        return this.joystickModel.direction;
     }
 
     // 获取摇杆是否激活
     isJoystickActive(): boolean {
-        return this.joystickModel ? this.joystickModel.isActive : false;
+        return this.joystickModel.isActive;
     }
 
     // 组件销毁时清理
