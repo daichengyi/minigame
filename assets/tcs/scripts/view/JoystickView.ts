@@ -29,18 +29,6 @@ export class JoystickView extends Component {
     updateJoystickPosition(touchPos: Vec2, centerPos: Vec2): void {
         if (!this.joystickModel || !this.joystickModel.isActive) return;
 
-        // 计算相对于中心的位置
-        const relativePos = new Vec2();
-        Vec2.subtract(relativePos, touchPos, centerPos);
-
-        // 限制在最大半径内
-        const distance = relativePos.length();
-        const maxRadius = this.joystickModel.maxRadius;
-
-        if (distance > maxRadius) {
-            relativePos.multiplyScalar(maxRadius / distance);
-        }
-
         // 设置摇杆点位置（相对于joystickBg的本地坐标）
         const joystickBg = this.joystickBg;
         const uiTransform = joystickBg.getComponent(UITransform);
@@ -52,8 +40,8 @@ export class JoystickView extends Component {
 
             // 限制在最大半径内
             const localDistance = localPos.length();
-            if (localDistance > maxRadius) {
-                localPos.multiplyScalar(maxRadius / localDistance);
+            if (localDistance > this.joystickModel.maxRadius) {
+                localPos.multiplyScalar(this.joystickModel.maxRadius / localDistance);
             }
 
             this.joystickPoint.setPosition(localPos.x, localPos.y, 0);

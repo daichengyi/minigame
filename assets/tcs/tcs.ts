@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec2 } from 'cc';
+import { _decorator, Component, Node } from 'cc';
 import { JoystickController } from './scripts/controller/JoystickController';
 import { SnakeController } from './scripts/controller/SnakeController';
 const { ccclass, property } = _decorator;
@@ -44,13 +44,6 @@ export class tcs extends Component {
         // 更新蛇的移动
         if (this.snakeController) {
             this.snakeController.update(deltaTime);
-
-            // 每2秒输出一次调试信息
-            if (Math.floor(Date.now() / 1000) % 2 === 0) {
-                this.snakeController.debugPathInfo();
-                this.snakeController.debugInterpolationInfo();
-                this.snakeController.debugNodeCount();
-            }
         }
     }
 }

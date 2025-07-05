@@ -1,7 +1,5 @@
-import { _decorator, Vec2 } from 'cc';
-const { ccclass, property } = _decorator;
+import { Vec2 } from 'cc';
 
-@ccclass('JoystickModel')
 export class JoystickModel {
     // 摇杆状态
     private _isActive: boolean = false;

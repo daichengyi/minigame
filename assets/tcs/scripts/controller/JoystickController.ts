@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, input, Input, EventTouch, Vec2, Vec3, UITransform } from 'cc';
+import { _decorator, Component, Node, EventTouch, Vec2, Vec3 } from 'cc';
 import { JoystickModel } from '../model/JoystickModel';
 import { JoystickView } from '../view/JoystickView';
 const { ccclass, property } = _decorator;
@@ -9,7 +9,10 @@ export class JoystickController extends Component {
     private joystickView: JoystickView = null!;
 
     private joystickModel: JoystickModel = null!;
-    private isDragging: boolean = false;
+    private _isDragging: boolean = false;
+    get isDragging(): boolean {
+        return this._isDragging;
+    }
     private centerPosition: Vec2 = new Vec2();
 
     // 事件回调
@@ -50,7 +53,7 @@ export class JoystickController extends Component {
     private onTouchStart(event: EventTouch): void {
         const touchPos = event.getUILocation();
 
-        this.isDragging = true;
+        this._isDragging = true;
         this.joystickView.setActive(true);
 
         // 确保摇杆模型被激活
@@ -61,7 +64,7 @@ export class JoystickController extends Component {
 
     // 触摸移动事件
     private onTouchMove(event: EventTouch): void {
-        if (!this.isDragging) return;
+        if (!this._isDragging) return;
 
         const touchPos = event.getUILocation();
         this.updateJoystickPosition(touchPos);
@@ -69,8 +72,8 @@ export class JoystickController extends Component {
 
     // 触摸结束事件
     private onTouchEnd(event: EventTouch): void {
-        if (this.isDragging) {
-            this.isDragging = false;
+        if (this._isDragging) {
+            this._isDragging = false;
             this.joystickView.setActive(false);
 
             // 先触发回调，再重置摇杆状态
@@ -81,7 +84,7 @@ export class JoystickController extends Component {
 
     // 更新摇杆位置
     private updateJoystickPosition(touchPos: Vec2): void {
-        if (!this.isDragging) return;
+        if (!this._isDragging) return;
 
         // 更新摇杆方向
         this.joystickModel.updateDirection(touchPos, this.centerPosition);
