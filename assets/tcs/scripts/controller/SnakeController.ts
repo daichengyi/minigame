@@ -4,7 +4,7 @@ import { SnakeBody } from '../model/SnakeBody';
 const { ccclass, property } = _decorator;
 
 /**
- * 单个蛇的控制器
+ * 贪吃蛇控制器 - 优化版本
  */
 @ccclass('SnakeController')
 export class SnakeController extends Component {
@@ -21,174 +21,175 @@ export class SnakeController extends Component {
     @property(Node)
     private bodyContainer: Node = null!;
 
-    // 蛇的初始参数
+    // 游戏参数
     private readonly START_POSITION: Vec2 = new Vec2(0, 0);
-
-    private isMoving: boolean = false;
-
-    private _bodyList: SnakeBody[] = null!;
-
-    private _space: number = 30;
-
-    // 蛇的位置和方向
-    private _moveSpeed: number = 100; // 移动速度（像素/秒）
-    private _position: Vec3 = new Vec3(0, 0);
-    private _currentDirection: Vec3 = new Vec3(0, 0); // 当前实际移动方向
-    private _targetDirection: Vec2 = new Vec2(0, 0); // 目标方向（摇杆输入）
-
-
     private readonly INIT_LENGTH: number = 8;
+    private readonly MOVE_SPEED: number = 100; // 移动速度（像素/秒）
+    private readonly POINT_RECORD_DISTANCE: number = 4; // 轨迹点记录间隔，像素
+    private readonly BODY_SPACING: number = 30; // 身体间距（像素）
+
+    // 状态管理
+    private isMoving: boolean = false;
+    private _bodyList: SnakeBody[] = [];
+    private _currentDirection: Vec3 = new Vec3(0, 0);
+
+    // 轨迹点系统
+    private pointsArray: Vec3[] = [];
+    private lastRecordPosition: Vec3 = new Vec3();
 
     start(): void {
-        // 初始化蛇模型
         this.initSnake();
-
-        // 设置摇杆方向变化回调
         this.setupJoystickCallback();
     }
 
     private initSnake(): void {
         this._bodyList = [];
+        this.pointsArray = [];
+        this.lastRecordPosition = new Vec3();
 
         // 初始化蛇头
         const snakeHead = this.head.getComponent(SnakeBody) || this.head.addComponent(SnakeBody);
-        snakeHead.init(true);
-        // 设置蛇头初始位置
+        snakeHead.init();
         this.head.setPosition(this.START_POSITION.x, this.START_POSITION.y, 0);
         this._bodyList.push(snakeHead);
 
-        // 初始化蛇身，每个身体部分间隔30像素
+        // 记录初始轨迹点
+        this.lastRecordPosition = this.head.getPosition();
+        this.pointsArray.push(this.lastRecordPosition.clone());
+
+        // 初始化蛇身
         for (let i = 1; i <= this.INIT_LENGTH; i++) {
             const node = instantiate(this.body);
             node.setParent(this.bodyContainer);
             node.active = true;
 
             const snakeBody = node.getComponent(SnakeBody) || node.addComponent(SnakeBody);
-            snakeBody.init(false);
+            snakeBody.init();
 
-            if (i == 1) {
-                snakeBody.prior = snakeHead;
-            } else {
-                snakeBody.prior = this._bodyList[i - 1];
-            }
-
-            // 计算身体部分的初始位置：头部位置减去间距
-            const bodyPosition = new Vec2(
-                this.START_POSITION.x - i * this._space,
-                this.START_POSITION.y
+            // 设置初始位置 - 使用BODY_SPACING常量确保一致性
+            const bodyPosition = new Vec3(
+                this.START_POSITION.x - i * this.BODY_SPACING,
+                this.START_POSITION.y,
+                0
             );
-            node.setPosition(bodyPosition.x, bodyPosition.y, 0);
-
+            node.setPosition(bodyPosition);
             this._bodyList.push(snakeBody);
         }
     }
 
-    // 设置摇杆回调
     private setupJoystickCallback(): void {
         this.joystickController.setDirectionChangeCallback((direction: Vec2) => {
             this.onJoystickDirectionChange(direction);
         });
     }
 
-    // 摇杆方向变化回调
     private onJoystickDirectionChange(direction: Vec2): void {
-        // 如果摇杆有输入，开始移动并更新方向
         if (!direction.equals(Vec2.ZERO)) {
             if (!this.isMoving) {
-                this.startMoving();
+                this.isMoving = true;
             }
             this.updateDirection(direction);
         } else {
-            // 如果摇杆回到中心，停止移动
-            this.stopMoving();
+            this.isMoving = false;
         }
     }
 
-    updateDirection(direction: Vec2): void {
+    private updateDirection(direction: Vec2): void {
         this._currentDirection = new Vec3(direction.x, direction.y, 0);
-        // 设置头部旋转（根据移动方向）
+
         if (!direction.equals(Vec2.ZERO)) {
-            this._bodyList[0].prevEuler = this.head.angle;
             const angle = Math.atan2(direction.y, direction.x) * 180 / Math.PI;
             this.head.setRotationFromEuler(0, 0, angle);
         }
     }
 
-    // 开始移动
-    startMoving(): void {
-        this.isMoving = true;
-    }
-
-    // 停止移动
-    stopMoving(): void {
-        this.isMoving = false;
-    }
-
-    // 更新蛇的移动
     update(deltaTime: number): void {
-        if (!this.isMoving) {
-            return;
-        }
-        // 更新蛇的移动
+        if (!this.isMoving) return;
         this.updateMovement(deltaTime);
     }
 
-    updateMovement(deltaTime: number): void {
-        // 更新蛇的移动
-        this._bodyList[0].prevPosition = this.head.getPosition();
-
-        const moveDistance = this._moveSpeed * deltaTime;
+    private updateMovement(deltaTime: number): void {
+        const moveDistance = this.MOVE_SPEED * deltaTime;
         const moveVector = new Vec3();
         Vec3.multiplyScalar(moveVector, this._currentDirection, moveDistance);
-        Vec3.add(this._position, this._position, moveVector);
 
-        // 更新头部节点位置
-        this.head.setPosition(this._position);
+        const currentPosition = this.head.getPosition();
+        Vec3.add(currentPosition, currentPosition, moveVector);
+        this.head.setPosition(currentPosition);
 
+        this.recordTrajectoryPoint();
         this.updateBody();
     }
 
-    updateBody() {
-        for (let i = 1; i < this._bodyList.length; i++) {
-            const body = this._bodyList[i];
-            body.prevPosition = body.node.getPosition();
-            body.prevEuler = body.node.angle;
+    private recordTrajectoryPoint(): void {
+        const currentPosition = this.head.getPosition();
+        const distance = Vec3.distance(currentPosition, this.lastRecordPosition);
 
-            // 获取前一个节点的位置和方向
-            const priorPosition = body.prior.prevPosition;
-            const priorAngle = body.prior.prevEuler;
-
-            // 计算身体节点应该保持的间距位置
-            const angleRad = priorAngle * Math.PI / 180;
-            const offsetX = -Math.cos(angleRad) * this._space;
-            const offsetY = -Math.sin(angleRad) * this._space;
-
-            const targetPosition = new Vec3(
-                priorPosition.x + offsetX,
-                priorPosition.y + offsetY,
-                priorPosition.z
-            );
-
-            body.node.setPosition(targetPosition);
-            body.node.setRotationFromEuler(0, 0, priorAngle);
+        if (distance >= this.POINT_RECORD_DISTANCE) {
+            this.pointsArray.push(currentPosition.clone());
+            this.lastRecordPosition = currentPosition.clone();
+            this.cleanTrajectoryPoints();
         }
     }
 
-    // 添加身体节点
-    addBodyPart(): void {
-        // this.addBodyPart();
-        // this.addBodyNode();
+    private cleanTrajectoryPoints(): void {
+        const maxPoints = this._bodyList.length * 5; // 保留更多轨迹点
+        while (this.pointsArray.length > maxPoints) {
+            this.pointsArray.shift();
+        }
     }
 
-    // 移除身体节点
-    removeBodyPart(): void {
-        // this.removeBodyPart();
-        // this.removeBodyNode();
+    private getBodyTargetPosition(bodyIndex: number): Vec3 {
+        // 修正：使用BODY_SPACING计算精确的轨迹点索引
+        const trajectoryPointIndex = bodyIndex * (this.BODY_SPACING / this.POINT_RECORD_DISTANCE);
+        const targetPointIndex = this.pointsArray.length - 1 - Math.floor(trajectoryPointIndex);
+        return targetPointIndex >= 0 ? this.pointsArray[targetPointIndex] : this.pointsArray[0] || new Vec3();
     }
 
-    // 设置移动速度
-    setMoveSpeed(speed: number): void {
-        // this.moveSpeed = speed;
+    // 修正：插值计算身体目标位置
+    private getBodyTargetPositionWithInterpolation(bodyIndex: number): Vec3 {
+        // 使用BODY_SPACING计算精确的轨迹点索引
+        const trajectoryPointIndex = bodyIndex * (this.BODY_SPACING / this.POINT_RECORD_DISTANCE);
+        const baseIndex = this.pointsArray.length - 1 - Math.floor(trajectoryPointIndex);
+
+        if (baseIndex < 0) {
+            return this.pointsArray[0] || new Vec3();
+        }
+
+        if (baseIndex >= this.pointsArray.length - 1) {
+            return this.pointsArray[this.pointsArray.length - 1];
+        }
+
+        // 计算插值权重
+        const fraction = trajectoryPointIndex - Math.floor(trajectoryPointIndex);
+
+        const currentPoint = this.pointsArray[baseIndex];
+        const nextPoint = this.pointsArray[baseIndex + 1];
+
+        // 线性插值计算
+        const interpolatedPosition = new Vec3();
+        Vec3.lerp(interpolatedPosition, currentPoint, nextPoint, fraction);
+
+        return interpolatedPosition;
     }
 
+    private updateBody(): void {
+        for (let i = 1; i < this._bodyList.length; i++) {
+            const body = this._bodyList[i];
+            const targetPosition = this.getBodyTargetPositionWithInterpolation(i); // 使用插值版本
+
+            body.prevPosition = body.node.getPosition();
+            body.node.setPosition(targetPosition);
+
+            // 计算旋转角度
+            if (i < this._bodyList.length - 1) {
+                const nextPosition = this.getBodyTargetPositionWithInterpolation(i + 1);
+                const angle = Math.atan2(
+                    targetPosition.y - nextPosition.y,
+                    targetPosition.x - nextPosition.x
+                ) * 180 / Math.PI;
+                body.node.setRotationFromEuler(0, 0, angle);
+            }
+        }
+    }
 } 
