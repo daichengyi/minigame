@@ -5,6 +5,7 @@ const { ccclass, property } = _decorator;
 
 /**
  * 贪吃蛇控制器 - 优化版本
+ * 负责管理贪吃蛇的移动、身体跟随、轨迹点记录等核心逻辑
  */
 @ccclass('SnakeController')
 export class SnakeController extends Component {
@@ -23,9 +24,9 @@ export class SnakeController extends Component {
 
     // 游戏参数
     private readonly START_POSITION: Vec2 = new Vec2(0, 0);
-    private readonly INIT_LENGTH: number = 8;
+    private readonly INIT_LENGTH: number = 10;
     private readonly MOVE_SPEED: number = 100; // 移动速度（像素/秒）
-    private readonly POINT_RECORD_DISTANCE: number = 4; // 轨迹点记录间隔，像素
+    private readonly POINT_RECORD_DISTANCE: number = 5; // 轨迹点记录间隔，像素
     private readonly BODY_SPACING: number = 30; // 身体间距（像素）
 
     // 状态管理
@@ -37,11 +38,19 @@ export class SnakeController extends Component {
     private pointsArray: Vec3[] = [];
     private lastRecordPosition: Vec3 = new Vec3();
 
+    /**
+     * 组件启动时调用
+     * 初始化贪吃蛇并设置摇杆回调
+     */
     start(): void {
         this.initSnake();
         this.setupJoystickCallback();
     }
 
+    /**
+     * 初始化贪吃蛇
+     * 创建蛇头、蛇身，设置初始位置，初始化轨迹点系统
+     */
     private initSnake(): void {
         this._bodyList = [];
         this.pointsArray = [];
@@ -51,14 +60,13 @@ export class SnakeController extends Component {
         const snakeHead = this.head.getComponent(SnakeBody) || this.head.addComponent(SnakeBody);
         snakeHead.init();
         this.head.setPosition(this.START_POSITION.x, this.START_POSITION.y, 0);
-        this._bodyList.push(snakeHead);
 
         // 记录初始轨迹点
         this.lastRecordPosition = this.head.getPosition();
         this.pointsArray.push(this.lastRecordPosition.clone());
 
         // 初始化蛇身
-        for (let i = 1; i <= this.INIT_LENGTH; i++) {
+        for (let i = 0; i < this.INIT_LENGTH; i++) {
             const node = instantiate(this.body);
             node.setParent(this.bodyContainer);
             node.active = true;
@@ -77,12 +85,21 @@ export class SnakeController extends Component {
         }
     }
 
+    /**
+     * 设置摇杆回调
+     * 注册摇杆方向变化事件，当摇杆输入时更新蛇的移动
+     */
     private setupJoystickCallback(): void {
         this.joystickController.setDirectionChangeCallback((direction: Vec2) => {
             this.onJoystickDirectionChange(direction);
         });
     }
 
+    /**
+     * 摇杆方向变化回调
+     * 处理摇杆输入，控制蛇的移动状态和方向
+     * @param direction 摇杆输入的方向向量
+     */
     private onJoystickDirectionChange(direction: Vec2): void {
         if (!direction.equals(Vec2.ZERO)) {
             if (!this.isMoving) {
@@ -94,6 +111,11 @@ export class SnakeController extends Component {
         }
     }
 
+    /**
+     * 更新蛇的移动方向
+     * 根据摇杆输入更新当前移动方向，并设置蛇头的旋转角度
+     * @param direction 目标移动方向
+     */
     private updateDirection(direction: Vec2): void {
         this._currentDirection = new Vec3(direction.x, direction.y, 0);
 
@@ -103,11 +125,21 @@ export class SnakeController extends Component {
         }
     }
 
+    /**
+     * 每帧更新
+     * 如果蛇正在移动，则更新蛇的移动逻辑
+     * @param deltaTime 帧间隔时间
+     */
     update(deltaTime: number): void {
         if (!this.isMoving) return;
         this.updateMovement(deltaTime);
     }
 
+    /**
+     * 更新蛇的移动
+     * 根据当前方向和速度移动蛇头，记录轨迹点，更新身体跟随
+     * @param deltaTime 帧间隔时间
+     */
     private updateMovement(deltaTime: number): void {
         const moveDistance = this.MOVE_SPEED * deltaTime;
         const moveVector = new Vec3();
@@ -121,6 +153,10 @@ export class SnakeController extends Component {
         this.updateBody();
     }
 
+    /**
+     * 记录轨迹点
+     * 当蛇头移动距离达到记录间隔时，在轨迹点数组中添加新的位置点
+     */
     private recordTrajectoryPoint(): void {
         const currentPosition = this.head.getPosition();
         const distance = Vec3.distance(currentPosition, this.lastRecordPosition);
@@ -132,21 +168,23 @@ export class SnakeController extends Component {
         }
     }
 
+    /**
+     * 清理轨迹点
+     * 移除过期的轨迹点，控制内存使用，只保留身体跟随所需的轨迹点数量
+     */
     private cleanTrajectoryPoints(): void {
-        const maxPoints = this._bodyList.length * 5; // 保留更多轨迹点
+        const maxPoints = this._bodyList.length * 8; // 保留更多轨迹点
         while (this.pointsArray.length > maxPoints) {
             this.pointsArray.shift();
         }
     }
 
-    private getBodyTargetPosition(bodyIndex: number): Vec3 {
-        // 修正：使用BODY_SPACING计算精确的轨迹点索引
-        const trajectoryPointIndex = bodyIndex * (this.BODY_SPACING / this.POINT_RECORD_DISTANCE);
-        const targetPointIndex = this.pointsArray.length - 1 - Math.floor(trajectoryPointIndex);
-        return targetPointIndex >= 0 ? this.pointsArray[targetPointIndex] : this.pointsArray[0] || new Vec3();
-    }
-
-    // 修正：插值计算身体目标位置
+    /**
+     * 插值计算身体目标位置
+     * 根据身体索引计算其在轨迹点数组中的目标位置，使用线性插值实现平滑移动
+     * @param bodyIndex 身体节点的索引
+     * @returns 计算出的目标位置
+     */
     private getBodyTargetPositionWithInterpolation(bodyIndex: number): Vec3 {
         // 使用BODY_SPACING计算精确的轨迹点索引
         const trajectoryPointIndex = bodyIndex * (this.BODY_SPACING / this.POINT_RECORD_DISTANCE);
@@ -173,20 +211,33 @@ export class SnakeController extends Component {
         return interpolatedPosition;
     }
 
+    /**
+     * 更新身体节点
+     * 遍历所有身体节点，更新它们的位置和旋转角度，实现身体跟随蛇头的效果
+     */
     private updateBody(): void {
-        for (let i = 1; i < this._bodyList.length; i++) {
+        for (let i = 0; i < this._bodyList.length; i++) {
             const body = this._bodyList[i];
             const targetPosition = this.getBodyTargetPositionWithInterpolation(i); // 使用插值版本
 
             body.prevPosition = body.node.getPosition();
             body.node.setPosition(targetPosition);
 
-            // 计算旋转角度
+            // 修复：计算旋转角度
             if (i < this._bodyList.length - 1) {
+                // 修复：使用i+1获取下一个位置
                 const nextPosition = this.getBodyTargetPositionWithInterpolation(i + 1);
                 const angle = Math.atan2(
                     targetPosition.y - nextPosition.y,
                     targetPosition.x - nextPosition.x
+                ) * 180 / Math.PI;
+                body.node.setRotationFromEuler(0, 0, angle);
+            } else {
+                // 最后一个节点：使用前一个节点的方向
+                const prevPosition = this.getBodyTargetPositionWithInterpolation(i - 1);
+                const angle = Math.atan2(
+                    prevPosition.y - targetPosition.y,
+                    prevPosition.x - targetPosition.x
                 ) * 180 / Math.PI;
                 body.node.setRotationFromEuler(0, 0, angle);
             }
