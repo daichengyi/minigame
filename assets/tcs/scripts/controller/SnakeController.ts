@@ -36,6 +36,9 @@ export class SnakeController extends Component {
     private _currentDirection: Vec3 = new Vec3(0, 0); // 当前实际移动方向
     private _targetDirection: Vec2 = new Vec2(0, 0); // 目标方向（摇杆输入）
 
+
+    private readonly INIT_LENGTH: number = 8;
+
     start(): void {
         // 初始化蛇模型
         this.initSnake();
@@ -55,7 +58,7 @@ export class SnakeController extends Component {
         this._bodyList.push(snakeHead);
 
         // 初始化蛇身，每个身体部分间隔30像素
-        for (let i = 1; i <= 8; i++) {
+        for (let i = 1; i <= this.INIT_LENGTH; i++) {
             const node = instantiate(this.body);
             node.setParent(this.bodyContainer);
             node.active = true;
@@ -151,8 +154,23 @@ export class SnakeController extends Component {
             body.prevPosition = body.node.getPosition();
             body.prevEuler = body.node.angle;
 
-            body.node.setPosition(body.prior.prevPosition);
-            body.node.setRotationFromEuler(0, 0, body.prior.prevEuler);
+            // 获取前一个节点的位置和方向
+            const priorPosition = body.prior.prevPosition;
+            const priorAngle = body.prior.prevEuler;
+
+            // 计算身体节点应该保持的间距位置
+            const angleRad = priorAngle * Math.PI / 180;
+            const offsetX = -Math.cos(angleRad) * this._space;
+            const offsetY = -Math.sin(angleRad) * this._space;
+
+            const targetPosition = new Vec3(
+                priorPosition.x + offsetX,
+                priorPosition.y + offsetY,
+                priorPosition.z
+            );
+
+            body.node.setPosition(targetPosition);
+            body.node.setRotationFromEuler(0, 0, priorAngle);
         }
     }
 
