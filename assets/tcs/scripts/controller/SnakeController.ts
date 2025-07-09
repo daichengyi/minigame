@@ -243,4 +243,12 @@ export class SnakeController extends Component {
             }
         }
     }
+
+    /**
+     * 获取蛇头节点
+     * @returns 蛇头节点
+     */
+    getHead(): Node | null {
+        return this.head;
+    }
 } 
