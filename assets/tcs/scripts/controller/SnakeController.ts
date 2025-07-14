@@ -251,4 +251,40 @@ export class SnakeController extends Component {
     getHead(): Node | null {
         return this.head;
     }
+
+    /**
+     * 添加身体节点
+     * 在蛇尾添加一个新的身体节点
+     * @returns 新创建的身体节点
+     */
+    addBodySegment(): Node {
+        // 创建新的身体节点
+        const node = instantiate(this.body);
+        node.setParent(this.bodyContainer);
+        node.active = true;
+
+        const snakeBody = node.getComponent(SnakeBody) || node.addComponent(SnakeBody);
+        snakeBody.init();
+
+        // 如果已有身体节点，则将新节点放在最后一个节点的位置
+        if (this._bodyList.length > 0) {
+            const lastBody = this._bodyList[this._bodyList.length - 1];
+            const lastPosition = lastBody.node.getPosition();
+            node.setPosition(lastPosition);
+        } else {
+            // 如果没有身体节点，则放在蛇头后面
+            const headPosition = this.head.getPosition();
+            const direction = new Vec3(-this._currentDirection.x, -this._currentDirection.y, 0);
+            direction.normalize();
+
+            const bodyPosition = new Vec3();
+            Vec3.scaleAndAdd(bodyPosition, headPosition, direction, this.BODY_SPACING);
+            node.setPosition(bodyPosition);
+        }
+
+        // 添加到身体列表
+        this._bodyList.push(snakeBody);
+
+        return node;
+    }
 } 

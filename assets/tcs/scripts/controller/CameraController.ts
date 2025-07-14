@@ -101,6 +101,10 @@ export class CameraController extends Component {
 
         // 获取蛇头世界位置
         this.targetNode.getWorldPosition(out);
+
+        // 设置Z轴距离
+        out.z = 1000;
+
         return out;
     }
 
