@@ -33,6 +33,8 @@ export class SnakeController extends Component {
     private isMoving: boolean = false;
     private _bodyList: SnakeBody[] = [];
     private _currentDirection: Vec3 = new Vec3(0, 0);
+    // 速度倍率，默认为1.0（正常速度）
+    private _speedMultiplier: number = 1.0;
 
     // 轨迹点系统
     private pointsArray: Vec3[] = [];
@@ -133,6 +135,26 @@ export class SnakeController extends Component {
     update(deltaTime: number): void {
         if (!this.isMoving) return;
         this.updateMovement(deltaTime);
+
+        // 额外处理：更新加速状态
+        this.updateAccelerationStates(deltaTime);
+    }
+
+    /**
+     * 设置速度倍率
+     * @param multiplier 速度倍率，1.0为正常速度
+     */
+    setSpeedMultiplier(multiplier: number): void {
+        // 限制倍率在合理范围内
+        this._speedMultiplier = Math.max(0.5, Math.min(3.0, multiplier));
+    }
+
+    /**
+     * 获取当前速度倍率
+     * @returns 当前速度倍率
+     */
+    getSpeedMultiplier(): number {
+        return this._speedMultiplier;
     }
 
     /**
@@ -141,7 +163,10 @@ export class SnakeController extends Component {
      * @param deltaTime 帧间隔时间
      */
     private updateMovement(deltaTime: number): void {
-        const moveDistance = this.MOVE_SPEED * deltaTime;
+        // 应用速度倍率
+        const adjustedSpeed = this.MOVE_SPEED * this._speedMultiplier;
+        const moveDistance = adjustedSpeed * deltaTime;
+
         const moveVector = new Vec3();
         Vec3.multiplyScalar(moveVector, this._currentDirection, moveDistance);
 
@@ -220,27 +245,41 @@ export class SnakeController extends Component {
             const body = this._bodyList[i];
             const targetPosition = this.getBodyTargetPositionWithInterpolation(i); // 使用插值版本
 
-            body.prevPosition = body.node.getPosition();
-            body.node.setPosition(targetPosition);
-
-            // 修复：计算旋转角度
-            if (i < this._bodyList.length - 1) {
-                // 修复：使用i+1获取下一个位置
-                const nextPosition = this.getBodyTargetPositionWithInterpolation(i + 1);
-                const angle = Math.atan2(
-                    targetPosition.y - nextPosition.y,
-                    targetPosition.x - nextPosition.x
-                ) * 180 / Math.PI;
-                body.node.setRotationFromEuler(0, 0, angle);
-            } else {
-                // 最后一个节点：使用前一个节点的方向
-                const prevPosition = this.getBodyTargetPositionWithInterpolation(i - 1);
-                const angle = Math.atan2(
-                    prevPosition.y - targetPosition.y,
-                    prevPosition.x - targetPosition.x
-                ) * 180 / Math.PI;
-                body.node.setRotationFromEuler(0, 0, angle);
+            // 如果不在加速状态，正常更新位置
+            if (!body.isAccelerating) {
+                body.prevPosition = body.node.getPosition();
+                body.node.setPosition(targetPosition);
             }
+
+            // 更新旋转角度
+            this.updateBodyRotation(i, body);
+        }
+    }
+
+    /**
+     * 更新身体节点的旋转
+     * @param index 节点索引
+     * @param body 身体组件
+     */
+    private updateBodyRotation(index: number, body: SnakeBody): void {
+        const currentPos = body.node.getPosition();
+
+        if (index < this._bodyList.length - 1) {
+            // 非尾节点：使用下一个节点的位置计算方向
+            const nextPosition = this.getBodyTargetPositionWithInterpolation(index + 1);
+            const angle = Math.atan2(
+                currentPos.y - nextPosition.y,
+                currentPos.x - nextPosition.x
+            ) * 180 / Math.PI;
+            body.node.setRotationFromEuler(0, 0, angle);
+        } else {
+            // 尾节点：使用前一个节点的方向
+            const prevPosition = this.getBodyTargetPositionWithInterpolation(index - 1);
+            const angle = Math.atan2(
+                prevPosition.y - currentPos.y,
+                prevPosition.x - currentPos.x
+            ) * 180 / Math.PI;
+            body.node.setRotationFromEuler(0, 0, angle);
         }
     }
 
@@ -286,5 +325,162 @@ export class SnakeController extends Component {
         this._bodyList.push(snakeBody);
 
         return node;
+    }
+
+    /**
+     * 随机移除一节身体并触发后续节点加速
+     * @returns 被移除的节点索引，如果没有移除则返回-1
+     */
+    randomBody(): number {
+        // 确保至少有2节身体
+        if (this._bodyList.length <= 1) return -1;
+
+        // 随机选择一个身体节点（避免选择第一节，保持与头部的连接）
+        const minIndex = 1; // 从第二节开始选择
+        const maxIndex = this._bodyList.length - 1;
+        const randomIndex = Math.floor(Math.random() * (maxIndex - minIndex + 1)) + minIndex;
+
+        // 获取要移除的节点
+        const removedBody = this._bodyList[randomIndex];
+        const removedNode = removedBody.node;
+
+        // 从身体列表中移除
+        this._bodyList.splice(randomIndex, 1);
+
+        // 标记后续节点进入加速状态
+        this.triggerAccelerationEffect(randomIndex);
+
+        // 销毁节点
+        removedNode.destroy();
+
+        // 重新平衡轨迹点系统
+        this.rebalanceTrajectorySystem();
+
+        // 返回移除的索引
+        return randomIndex;
+    }
+
+    /**
+     * 触发加速效果
+     * @param startIndex 开始加速的节点索引
+     */
+    private triggerAccelerationEffect(startIndex: number): void {
+        // 基础加速因子
+        const baseAcceleration = 2.0;
+
+        // 影响范围（节点数）
+        const affectRange = 5;
+
+        // 为范围内的后续节点设置加速状态
+        for (let i = startIndex; i < Math.min(this._bodyList.length, startIndex + affectRange); i++) {
+            const body = this._bodyList[i];
+
+            // 设置加速状态
+            body.isAccelerating = true;
+
+            // 根据距离计算加速因子（越远加速越小）
+            const distanceFactor = 1 - ((i - startIndex) / affectRange);
+            const accelerationFactor = baseAcceleration * (0.5 + distanceFactor * 0.5);
+
+            body.accelerationFactor = accelerationFactor;
+        }
+    }
+
+    /**
+     * 计算加速状态下的位置
+     * @param body 身体组件
+     * @param targetPosition 目标位置
+     * @param deltaTime 时间增量
+     * @returns 计算后的位置
+     */
+    private calculateAcceleratedPosition(body: SnakeBody, targetPosition: Vec3, deltaTime: number): Vec3 {
+        // 获取当前位置
+        const currentPosition = body.node.getPosition();
+
+        // 计算方向向量
+        const direction = new Vec3();
+        Vec3.subtract(direction, targetPosition, currentPosition);
+
+        // 计算基础移动距离
+        const baseDistance = direction.length();
+
+        // 如果已经非常接近目标，直接返回目标位置
+        if (baseDistance < 1) {
+            return targetPosition.clone();
+        }
+
+        // 标准化方向向量
+        direction.normalize();
+
+        // 应用加速因子计算移动距离
+        const acceleratedDistance = baseDistance * body.accelerationFactor * deltaTime * 10;
+
+        // 限制单次移动距离，防止过冲
+        const clampedDistance = Math.min(acceleratedDistance, baseDistance * 0.8);
+
+        // 计算新位置
+        const newPosition = new Vec3();
+        Vec3.scaleAndAdd(newPosition, currentPosition, direction, clampedDistance);
+
+        return newPosition;
+    }
+
+    /**
+     * 更新所有节点的加速状态
+     * @param deltaTime 帧间隔时间
+     */
+    private updateAccelerationStates(deltaTime: number): void {
+        // 遍历所有身体节点
+        for (let i = 0; i < this._bodyList.length; i++) {
+            const body = this._bodyList[i];
+
+            // 如果节点处于加速状态
+            if (body.isAccelerating) {
+                // 获取目标位置
+                const targetPosition = this.getBodyTargetPositionWithInterpolation(i);
+
+                // 计算加速后的位置
+                const acceleratedPosition = this.calculateAcceleratedPosition(
+                    body,
+                    targetPosition,
+                    deltaTime
+                );
+
+                // 保存前一帧位置
+                body.prevPosition = body.node.getPosition();
+
+                // 应用新位置
+                body.node.setPosition(acceleratedPosition);
+
+                // 更新加速状态
+                body.updateAcceleration(deltaTime);
+            }
+        }
+    }
+
+    /**
+     * 在移除节点后重新平衡轨迹点系统
+     */
+    private rebalanceTrajectorySystem(): void {
+        // 重新计算需要的轨迹点数量
+        const requiredPoints = this._bodyList.length * 8;
+
+        // 确保轨迹点数量合适
+        if (this.pointsArray.length > requiredPoints * 1.5) {
+            // 如果轨迹点过多，移除多余的点
+            while (this.pointsArray.length > requiredPoints) {
+                this.pointsArray.shift();
+            }
+        }
+
+        // 确保至少有最小数量的轨迹点
+        const minRequiredPoints = Math.max(10, this._bodyList.length * 3);
+        if (this.pointsArray.length < minRequiredPoints) {
+            // 如果轨迹点不足，添加当前位置作为额外点
+            const currentHeadPos = this.head.getPosition();
+            for (let i = this.pointsArray.length; i < minRequiredPoints; i++) {
+                this.pointsArray.push(currentHeadPos.clone());
+            }
+        }
     }
 } 
